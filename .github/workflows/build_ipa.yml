@@ -16,30 +16,33 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Instalar XcodeGen
-        run: brew install xcodegen
-
-      - name: Generar Proyecto Xcode (.xcodeproj)
+      - name: Verificar XcodeGen y Generar Proyecto Xcode (.xcodeproj)
         working-directory: MisFinanzasiOS
-        run: xcodegen generate
+        run: |
+          if ! command -v xcodegen &> /dev/null; then
+            brew install xcodegen
+          fi
+          xcodegen generate
 
       - name: Compilar App iOS (Release)
         working-directory: MisFinanzasiOS
         run: |
           xcodebuild clean build \
             -project MisFinanzas.xcodeproj \
-            -scheme MisFinanzas \
+            -target MisFinanzas \
             -configuration Release \
             -sdk iphoneos \
-            -derivedDataPath build \
+            SYMROOT="$PWD/build" \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES
 
       - name: Firmar Ad-Hoc para compatibilidad con SideStore y empaquetar .ipa
         working-directory: MisFinanzasiOS
         run: |
-          APP_PATH="build/Build/Products/Release-iphoneos/MisFinanzas.app"
+          APP_PATH=$(find build -name "MisFinanzas.app" -type d | head -n 1)
+          echo "App encontrada en: $APP_PATH"
           codesign --force --deep --sign - "$APP_PATH"
           mkdir -p Payload
           cp -r "$APP_PATH" Payload/

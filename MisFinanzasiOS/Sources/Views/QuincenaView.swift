@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct QuincenaView: View {
     @EnvironmentObject var vm: FinanzasViewModel

@@ -3,7 +3,6 @@ options:
   bundleIdPrefix: com.andres
   deploymentTarget:
     iOS: "16.0"
-  xcodeVersion: "15.0"
 
 settings:
   base:
@@ -13,16 +12,23 @@ settings:
     SWIFT_VERSION: 5.9
     TARGETED_DEVICE_FAMILY: "1"
     INFOPLIST_FILE: Sources/Info.plist
+    GENERATE_INFOPLIST_FILE: NO
 
 targets:
   MisFinanzas:
     type: application
     platform: iOS
+    deploymentTarget: "16.0"
     sources:
       - path: Sources
+        excludes:
+          - Info.plist
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.andres.misfinanzas
+        INFOPLIST_FILE: Sources/Info.plist
         CODE_SIGN_IDENTITY: ""
         CODE_SIGNING_REQUIRED: NO
         CODE_SIGNING_ALLOWED: NO
+    scheme:
+      gatherCoverageData: false
