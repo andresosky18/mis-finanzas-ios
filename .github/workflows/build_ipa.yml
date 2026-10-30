@@ -34,6 +34,7 @@ jobs:
             Sources/MisFinanzasApp.swift \
             Sources/Models/FinanzasModels.swift \
             Sources/Services/FinanzasViewModel.swift \
+            Sources/Views/LiquidGlassTheme.swift \
             Sources/Views/MainTabView.swift \
             Sources/Views/ResumenView.swift \
             Sources/Views/QuincenaView.swift \
