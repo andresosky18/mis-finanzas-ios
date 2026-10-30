@@ -4,253 +4,245 @@ import UIKit
 struct QuincenaView: View {
     @EnvironmentObject var vm: FinanzasViewModel
     @State private var showAddGasto = false
+    @State private var gastoEditar: GastoItem?
     @State private var nombreGasto = ""
     @State private var valorGasto = ""
     @State private var labelGasto = ""
     @State private var deudaVinculada = ""
-    @State private var searchText = ""
     @State private var filtroEstado: Int = 0 // 0 = Todos, 1 = Pendientes, 2 = Pagados
 
     var body: some View {
         let f = vm.finanzas
         let pagadosMonto = f.gastosLista.filter { $0.pagado }.reduce(0.0) { $0 + $1.valor }
         let porPagarMonto = max(0, f.totalGastosQuincena - pagadosMonto)
-        let progreso = f.totalGastosQuincena > 0 ? pagadosMonto / f.totalGastosQuincena : 0
-        let pagadosCount = f.gastosLista.filter { $0.pagado }.count
 
         let gastosFiltrados = f.gastosLista.filter { g in
-            let matchesSearch = searchText.isEmpty ||
-                g.nombre.localizedCaseInsensitiveContains(searchText) ||
-                g.label.localizedCaseInsensitiveContains(searchText)
-            let matchesState: Bool
             switch filtroEstado {
-            case 1: matchesState = !g.pagado
-            case 2: matchesState = g.pagado
-            default: matchesState = true
+            case 1: return !g.pagado
+            case 2: return g.pagado
+            default: return true
             }
-            return matchesSearch && matchesState
         }
 
-        List {
-            // 1. CABECERA DE PROGRESO QUINCENAL NATIVA
-            Section {
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack(spacing: 16) {
-                        LiquidCircularRing(
-                            progress: progreso,
-                            color: Color(hex: "#10B981"),
-                            size: 60,
-                            lineWidth: 6.5
-                        )
+        ZStack {
+            LiquidGlassBackground()
 
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("TOTAL PRESUPUESTO FIJO")
-                                .font(.system(size: 10, weight: .heavy, design: .rounded))
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 14) {
+
+                    // 1. CHIPS DE FILTRO HORIZONTALES (Idénticos a "All | Meat | Vegetables" de Referencia #3 Household)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            HouseholdFilterChip(
+                                title: "Todos (\(f.gastosLista.count))",
+                                isSelected: filtroEstado == 0
+                            ) { filtroEstado = 0 }
+
+                            HouseholdFilterChip(
+                                title: "Pendientes (\(f.gastosLista.filter { !$0.pagado }.count))",
+                                isSelected: filtroEstado == 1
+                            ) { filtroEstado = 1 }
+
+                            HouseholdFilterChip(
+                                title: "Pagados (\(f.gastosLista.filter { $0.pagado }.count))",
+                                isSelected: filtroEstado == 2
+                            ) { filtroEstado = 2 }
+
+                            Button {
+                                nombreGasto = ""
+                                valorGasto = ""
+                                labelGasto = ""
+                                deudaVinculada = ""
+                                showAddGasto = true
+                            } label: {
+                                Label("Nuevo Gasto", systemImage: "plus")
+                                    .font(.system(size: 12, weight: .heavy, design: .rounded))
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 8)
+                                    .background(.ultraThinMaterial)
+                                    .foregroundColor(Color(hex: "#4F46E5"))
+                                    .clipShape(Capsule())
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+
+                    // 2. TARJETA RESUMEN PAGADO vs PENDIENTE
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Pagado en esta quincena")
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
                                 .foregroundColor(.secondary)
-                            Text(f.totalGastosQuincena.copFormatted)
-                                .font(.system(size: 26, weight: .heavy, design: .rounded))
-                            Text("\(pagadosCount) de \(f.gastosLista.count) gastos pagados")
-                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            Text(pagadosMonto.copFormatted)
+                                .font(.system(size: 20, weight: .black, design: .rounded))
                                 .foregroundColor(Color(hex: "#10B981"))
                         }
-
                         Spacer()
-                    }
-
-                    ProgressView(value: progreso)
-                        .tint(Color(hex: "#10B981"))
-
-                    HStack {
-                        Label("Pagado: \(pagadosMonto.copFormatted)", systemImage: "checkmark.circle.fill")
-                            .font(.system(size: 12, weight: .bold, design: .rounded))
-                            .foregroundColor(Color(hex: "#10B981"))
-                        Spacer()
-                        Label("Pendiente: \(porPagarMonto.copFormatted)", systemImage: "clock.fill")
-                            .font(.system(size: 12, weight: .bold, design: .rounded))
-                            .foregroundColor(porPagarMonto > 0 ? Color(hex: "#EF4444") : .secondary)
-                    }
-
-                    HStack(spacing: 10) {
-                        Button {
-                            nombreGasto = ""
-                            valorGasto = ""
-                            labelGasto = ""
-                            deudaVinculada = ""
-                            showAddGasto = true
-                        } label: {
-                            Label("Añadir Gasto", systemImage: "plus.circle.fill")
-                                .font(.system(size: 13, weight: .bold, design: .rounded))
-                                .frame(maxWidth: .infinity)
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text("Falta por cubrir")
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .foregroundColor(.secondary)
+                            Text(porPagarMonto.copFormatted)
+                                .font(.system(size: 20, weight: .black, design: .rounded))
+                                .foregroundColor(Color(hex: "#F43F5E"))
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(Color(hex: "#6366F1"))
-
-                        Button(role: .destructive) {
-                            Task {
-                                await vm.sendAction(["accion": "reset_quincena"])
-                            }
-                        } label: {
-                            Label("Limpiar", systemImage: "arrow.counterclockwise")
-                                .font(.system(size: 13, weight: .bold, design: .rounded))
-                        }
-                        .buttonStyle(.bordered)
                     }
-                }
-                .padding(.vertical, 6)
-            }
+                    .padding(18)
+                    .liquidGlass(cornerRadius: 26)
 
-            // 2. FILTRO SEGMENTADO NATIVO DE iOS
-            Section {
-                Picker("Filtro", selection: $filtroEstado) {
-                    Text("Todos (\(f.gastosLista.count))").tag(0)
-                    Text("Pendientes (\(f.gastosLista.filter { !$0.pagado }.count))").tag(1)
-                    Text("Pagados (\(pagadosCount))").tag(2)
-                }
-                .pickerStyle(.segmented)
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
-            }
-
-            // 3. CHECKLIST DE GASTOS QUINCENALES CON SWIPE ACTIONS Y CONTEXT MENU
-            Section {
-                ForEach(gastosFiltrados) { gasto in
-                    Button {
-                        Task {
-                            await vm.sendAction([
-                                "accion": "toggle_gasto",
-                                "gasto": gasto.nombre
-                            ])
-                        }
-                    } label: {
+                    // 3. TARJETAS FLOTANTES INDIVIDUALES ESTILO "HOUSEHOLD" (Referencia #3)
+                    ForEach(gastosFiltrados) { gasto in
                         HStack(spacing: 14) {
-                            Image(systemName: gasto.pagado ? "checkmark.circle.fill" : "circle")
-                                .font(.system(size: 24, weight: .semibold))
-                                .foregroundStyle(gasto.pagado ? Color(hex: "#10B981") : .secondary)
-
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(gasto.nombre)
-                                    .font(.system(size: 15, weight: .semibold, design: .rounded))
-                                    .strikethrough(gasto.pagado)
-                                    .foregroundColor(gasto.pagado ? .secondary : .primary)
-
-                                HStack(spacing: 6) {
-                                    if !gasto.label.isEmpty {
-                                        Text(gasto.label)
-                                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                                            .padding(.horizontal, 7)
-                                            .padding(.vertical, 2)
-                                            .background(Color.secondary.opacity(0.14))
-                                            .foregroundColor(.secondary)
-                                            .clipShape(Capsule())
+                            Button {
+                                vm.triggerHaptic(.light)
+                                Task {
+                                    await vm.sendAction([
+                                        "accion": "toggle_gasto",
+                                        "gasto": gasto.nombre
+                                    ])
+                                }
+                            } label: {
+                                HStack(spacing: 14) {
+                                    ZStack {
+                                        Circle()
+                                            .fill(gasto.pagado ? Color(hex: "#10B981").opacity(0.16) : Color.primary.opacity(0.06))
+                                            .frame(width: 44, height: 44)
+                                        Image(systemName: gasto.pagado ? "checkmark" : "checklist")
+                                            .font(.system(size: 16, weight: .bold))
+                                            .foregroundColor(gasto.pagado ? Color(hex: "#10B981") : .secondary)
                                     }
-                                    if let deuda = gasto.deudaDetectada, !deuda.isEmpty {
-                                        Text("⚡ -Deuda \(deuda)")
-                                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                                            .padding(.horizontal, 7)
-                                            .padding(.vertical, 2)
-                                            .background(Color(hex: "#6366F1").opacity(0.16))
-                                            .foregroundColor(Color(hex: "#6366F1"))
+
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(gasto.nombre)
+                                            .font(.system(size: 16, weight: .heavy, design: .rounded))
+                                            .strikethrough(gasto.pagado)
+                                            .foregroundColor(gasto.pagado ? .secondary : .primary)
+
+                                        Text(gasto.pagado ? "Pagado en quincena" : (gasto.label.isEmpty ? "Pendiente por pagar" : gasto.label))
+                                            .font(.system(size: 11, weight: .heavy, design: .rounded))
+                                            .padding(.horizontal, 9)
+                                            .padding(.vertical, 3)
+                                            .background(
+                                                gasto.pagado
+                                                    ? Color(hex: "#10B981").opacity(0.15)
+                                                    : Color(hex: "#F43F5E").opacity(0.14)
+                                            )
+                                            .foregroundColor(
+                                                gasto.pagado ? Color(hex: "#10B981") : Color(hex: "#F43F5E")
+                                            )
                                             .clipShape(Capsule())
                                     }
                                 }
                             }
+                            .buttonStyle(.plain)
 
                             Spacer()
 
-                            Text("-\(gasto.valor.copFormatted)")
-                                .font(.system(size: 15, weight: .bold, design: .rounded))
-                                .foregroundColor(gasto.pagado ? .secondary : .primary)
-                        }
-                        .padding(.vertical, 3)
-                    }
-                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                        Button {
-                            Task {
-                                await vm.sendAction([
-                                    "accion": "toggle_gasto",
-                                    "gasto": gasto.nombre
-                                ])
-                            }
-                        } label: {
-                            Label(
-                                gasto.pagado ? "Desmarcar" : "Marcar Pagado",
-                                systemImage: gasto.pagado ? "arrow.uturn.backward" : "checkmark.circle.fill"
-                            )
-                        }
-                        .tint(Color(hex: "#10B981"))
-                    }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button(role: .destructive) {
-                            Task {
-                                await vm.sendAction([
-                                    "accion": "eliminar_gasto",
-                                    "gasto_eliminar": gasto.nombre
-                                ])
-                            }
-                        } label: {
-                            Label("Eliminar", systemImage: "trash.fill")
-                        }
-                    }
-                    .contextMenu {
-                        Button {
-                            Task {
-                                await vm.sendAction([
-                                    "accion": "toggle_gasto",
-                                    "gasto": gasto.nombre
-                                ])
-                            }
-                        } label: {
-                            Label(
-                                gasto.pagado ? "Desmarcar como pagado" : "Marcar como pagado",
-                                systemImage: gasto.pagado ? "circle" : "checkmark.circle.fill"
-                            )
-                        }
+                            HStack(spacing: 8) {
+                                Text(gasto.valor.copFormatted)
+                                    .font(.system(size: 14, weight: .black, design: .rounded))
+                                    .foregroundColor(.secondary)
 
-                        Button(role: .destructive) {
+                                Button {
+                                    nombreGasto = gasto.nombre
+                                    valorGasto = String(Int(gasto.valor))
+                                    labelGasto = gasto.label
+                                    deudaVinculada = gasto.deudaDetectada ?? ""
+                                    gastoEditar = gasto
+                                } label: {
+                                    Image(systemName: "pencil")
+                                        .font(.system(size: 12, weight: .bold))
+                                        .frame(width: 28, height: 28)
+                                        .background(Color.primary.opacity(0.07))
+                                        .clipShape(Circle())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(14)
+                        .liquidGlass(cornerRadius: 24)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 105)
+            }
+            .refreshable {
+                await vm.fetchAllData()
+            }
+        }
+        .sheet(item: $gastoEditar) { g in
+            NavigationStack {
+                Form {
+                    Section("Editar Gasto Quincenal") {
+                        LabeledContent("Concepto") {
+                            TextField("Concepto", text: $nombreGasto)
+                                .multilineTextAlignment(.trailing)
+                        }
+                        LabeledContent("Valor ($)") {
+                            TextField("Valor", text: $valorGasto)
+                                .keyboardType(.numberPad)
+                                .multilineTextAlignment(.trailing)
+                        }
+                        LabeledContent("Etiqueta / Día") {
+                            TextField("Día 10", text: $labelGasto)
+                                .multilineTextAlignment(.trailing)
+                        }
+                    }
+                    Section {
+                        Button("Guardar Cambios") {
+                            guard !nombreGasto.isEmpty, let val = Double(valorGasto), val > 0 else { return }
+                            Task {
+                                if nombreGasto != g.nombre {
+                                    await vm.sendAction([
+                                        "accion": "eliminar_gasto",
+                                        "gasto_eliminar": g.nombre
+                                    ])
+                                }
+                                await vm.sendAction([
+                                    "accion": "agregar_gasto",
+                                    "nombre_gasto": nombreGasto,
+                                    "valor_gasto": val,
+                                    "label_gasto": labelGasto,
+                                    "deuda_vinculada": deudaVinculada
+                                ])
+                                gastoEditar = nil
+                            }
+                        }
+                        .fontWeight(.bold)
+
+                        Button("Eliminar Gasto", role: .destructive) {
                             Task {
                                 await vm.sendAction([
                                     "accion": "eliminar_gasto",
-                                    "gasto_eliminar": gasto.nombre
+                                    "gasto_eliminar": g.nombre
                                 ])
+                                gastoEditar = nil
                             }
-                        } label: {
-                            Label("Eliminar Gasto", systemImage: "trash")
                         }
                     }
                 }
-            } header: {
-                Text("Gastos de la Quincena")
-            } footer: {
-                Text("⚡ Al marcar Moto, Cuota Celular o Universidad, el pago se descuenta automáticamente de la deuda en pagos.xo.je.")
+                .navigationTitle("Editar \(g.nombre)")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cerrar") { gastoEditar = nil }
+                    }
+                }
             }
-        }
-        .listStyle(.insetGrouped)
-        .searchable(text: $searchText, prompt: "Buscar gasto fijo...")
-        .navigationTitle("Presupuesto Fijo")
-        .refreshable {
-            await vm.fetchAllData()
+            .presentationDetents([.medium])
         }
         .sheet(isPresented: $showAddGasto) {
             NavigationStack {
                 Form {
-                    Section("Datos del Gasto Quincenal") {
-                        TextField("Nombre (ej. Gimnasio o Parqueadero U)", text: $nombreGasto)
+                    Section("Nuevo Gasto Quincenal") {
+                        TextField("Concepto (ej. Comida, Gasolina)", text: $nombreGasto)
                         TextField("Valor ($)", text: $valorGasto)
                             .keyboardType(.numberPad)
-                        TextField("Día de pago (ej. Día 10)", text: $labelGasto)
+                        TextField("Día o etiqueta (ej. Vence Día 10)", text: $labelGasto)
                     }
-
-                    Section("Descuento Automático de Deuda") {
-                        Picker("Vincular a Deuda", selection: $deudaVinculada) {
-                            Text("Ninguna (Gasto normal)").tag("")
-                            ForEach(f.deudasLista) { d in
-                                Text("Descontar de: \(d.nombre)").tag(d.nombre)
-                            }
-                        }
-                    }
-
                     Section {
-                        Button {
+                        Button("Guardar Gasto") {
                             guard !nombreGasto.isEmpty, let val = Double(valorGasto), val > 0 else { return }
                             Task {
                                 await vm.sendAction([
@@ -262,17 +254,11 @@ struct QuincenaView: View {
                                 ])
                                 showAddGasto = false
                             }
-                        } label: {
-                            HStack {
-                                Spacer()
-                                Label("Guardar Gasto", systemImage: "checkmark.circle.fill")
-                                    .fontWeight(.bold)
-                                Spacer()
-                            }
                         }
+                        .fontWeight(.bold)
                     }
                 }
-                .navigationTitle("Añadir Gasto Fijo")
+                .navigationTitle("Añadir Gasto")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
@@ -280,7 +266,30 @@ struct QuincenaView: View {
                     }
                 }
             }
-            .presentationDetents([.medium, .large])
+            .presentationDetents([.medium])
         }
+    }
+}
+
+struct HouseholdFilterChip: View {
+    let title: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 12, weight: .heavy, design: .rounded))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(
+                    isSelected
+                        ? AnyShapeStyle(Color(hex: "#4F46E5"))
+                        : AnyShapeStyle(.ultraThinMaterial)
+                )
+                .foregroundColor(isSelected ? .white : .primary)
+                .clipShape(Capsule())
+        }
+        .buttonStyle(LiquidScaleButtonStyle())
     }
 }

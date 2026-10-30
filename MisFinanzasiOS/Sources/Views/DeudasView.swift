@@ -20,220 +20,175 @@ struct DeudasView: View {
         let totalPagado = max(0, totalInicial - f.totalDeudaPendiente)
         let progresoGlobal = totalInicial > 0 ? totalPagado / totalInicial : 0
 
-        List {
-            // 1. RESUMEN CONSOLIDADO DE DEUDAS
-            Section {
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack(spacing: 16) {
-                        LiquidCircularRing(
-                            progress: progresoGlobal,
-                            color: Color(hex: "#6366F1"),
-                            size: 60,
-                            lineWidth: 6.5
-                        )
+        ZStack {
+            LiquidGlassBackground()
 
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("DEUDA PENDIENTE CONSOLIDADA")
-                                .font(.system(size: 10, weight: .heavy, design: .rounded))
-                                .foregroundColor(.secondary)
-                            Text(f.totalDeudaPendiente.copFormatted)
-                                .font(.system(size: 26, weight: .heavy, design: .rounded))
-                                .foregroundColor(Color(hex: "#EF4444"))
-                            Text("Ya pagaste \(totalPagado.copFormatted) de \(totalInicial.copFormatted)")
-                                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                                .foregroundColor(Color(hex: "#10B981"))
-                        }
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 14) {
 
-                        Spacer()
-                    }
-
-                    ProgressView(value: progresoGlobal)
-                        .tint(Color(hex: "#6366F1"))
-
-                    Button {
-                        formNombre = ""
-                        formTotal = ""
-                        formCuota = ""
-                        formIcono = "credit-card"
-                        showNuevaDeuda = true
-                    } label: {
-                        Label("Añadir Deuda Activa", systemImage: "plus.circle.fill")
-                            .font(.system(size: 13, weight: .bold, design: .rounded))
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Color(hex: "#6366F1"))
-                }
-                .padding(.vertical, 6)
-            }
-
-            // 2. AUDITORÍA DE DEUDAS (MOTO, UNIVERSIDAD, CELULAR, TV)
-            Section {
-                ForEach(f.deudasLista) { deuda in
-                    let accent = SFIconMapper.accentColor(for: deuda.nombre)
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack(spacing: 12) {
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(accent.opacity(0.15))
-                                    .frame(width: 42, height: 42)
-                                Image(systemName: SFIconMapper.symbol(for: deuda.icono))
-                                    .font(.system(size: 18, weight: .bold))
-                                    .foregroundColor(accent)
-                            }
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(deuda.nombre)
-                                    .font(.system(size: 17, weight: .heavy, design: .rounded))
-                                Text("ETA: \(deuda.etaTexto) (Cuota: \(deuda.cuota.copFormatted))")
-                                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                                    .foregroundColor(.secondary)
+                    // 1. TARJETA CORAL SIGNATURE ESTILO "monzo" (Referencia #4)
+                    VStack(spacing: 20) {
+                        HStack(alignment: .top) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("mis deudas")
+                                    .font(.system(size: 22, weight: .black, design: .rounded))
+                                    .foregroundColor(.white)
+                                Label(
+                                    "\(String(format: "%.1f%%", progresoGlobal * 100)) pagado (\(totalPagado.copFormatted))",
+                                    systemImage: "creditcard.fill"
+                                )
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .foregroundColor(.white.opacity(0.85))
                             }
 
                             Spacer()
 
-                            VStack(alignment: .trailing, spacing: 4) {
-                                Text(deuda.pendiente.copFormatted)
-                                    .font(.system(size: 17, weight: .heavy, design: .rounded))
-                                    .foregroundColor(deuda.pendiente > 0 ? Color(hex: "#EF4444") : Color(hex: "#10B981"))
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text(f.totalDeudaPendiente.copFormatted)
+                                    .font(.system(size: 24, weight: .black, design: .rounded))
+                                    .foregroundColor(.white)
+                                    .minimumScaleFactor(0.75)
+                                    .lineLimit(1)
+                                Text("Saldo Pendiente")
+                                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                    .foregroundColor(.white.opacity(0.8))
+                            }
+                        }
 
-                                HStack(spacing: 6) {
-                                    Button {
-                                        formNombre = deuda.nombre
-                                        formTotal = String(Int(deuda.total))
-                                        formPendiente = String(Int(deuda.pendiente))
-                                        formCuota = String(Int(deuda.cuota))
-                                        formIcono = deuda.icono
-                                        deudaEditar = deuda
-                                    } label: {
-                                        Image(systemName: "pencil")
-                                            .font(.system(size: 12, weight: .bold))
-                                            .padding(6)
-                                            .background(Color.secondary.opacity(0.14))
-                                            .clipShape(Circle())
-                                    }
-                                    .buttonStyle(.plain)
+                        // Botones Píldora Oscuros Translúcidos estilo "+ Add money | Cards | •••" de Monzo
+                        HStack(spacing: 8) {
+                            Button {
+                                formNombre = ""
+                                formTotal = ""
+                                formCuota = ""
+                                formIcono = "credit-card"
+                                showNuevaDeuda = true
+                            } label: {
+                                Label("Nueva deuda", systemImage: "plus.circle.fill")
+                                    .font(.system(size: 12, weight: .heavy, design: .rounded))
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 8)
+                                    .background(Color.black.opacity(0.32))
+                                    .foregroundColor(.white)
+                                    .clipShape(Capsule())
+                            }
 
-                                    if deuda.pendiente > 0 {
+                            if let primera = f.deudasLista.first {
+                                Button {
+                                    montoAbono = String(Int(primera.cuota))
+                                    deudaSeleccionada = primera
+                                } label: {
+                                    Label("Abonar cuota", systemImage: "creditcard.fill")
+                                        .font(.system(size: 12, weight: .heavy, design: .rounded))
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 8)
+                                        .background(Color.black.opacity(0.32))
+                                        .foregroundColor(.white)
+                                        .clipShape(Capsule())
+                                }
+                            }
+
+                            Spacer()
+                        }
+                    }
+                    .padding(20)
+                    .background(
+                        LinearGradient(
+                            colors: [Color(hex: "#E11D48"), Color(hex: "#CD1713"), Color(hex: "#EA580C")],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                    .shadow(color: Color(hex: "#CD1713").opacity(0.28), radius: 16, y: 8)
+
+                    // 2. TARJETAS FLOTANTES INDIVIDUALES DE CADA DEUDA (Estilo Household Referencia #3)
+                    ForEach(f.deudasLista) { deuda in
+                        let accent = SFIconMapper.accentColor(for: deuda.nombre)
+
+                        VStack(spacing: 12) {
+                            HStack(spacing: 12) {
+                                ZStack {
+                                    Circle()
+                                        .fill(accent.opacity(0.15))
+                                        .frame(width: 44, height: 44)
+                                    Image(systemName: SFIconMapper.symbol(for: deuda.icono))
+                                        .font(.system(size: 17, weight: .bold))
+                                        .foregroundColor(accent)
+                                }
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(deuda.nombre)
+                                        .font(.system(size: 16, weight: .heavy, design: .rounded))
+
+                                    Text("\(String(format: "%.1f%%", deuda.porcentaje * 100)) abonado · Cuota \(deuda.cuota.copFormatted)")
+                                        .font(.system(size: 10, weight: .heavy, design: .rounded))
+                                        .padding(.horizontal, 9)
+                                        .padding(.vertical, 3)
+                                        .background(accent.opacity(0.14))
+                                        .foregroundColor(accent)
+                                        .clipShape(Capsule())
+                                }
+
+                                Spacer()
+
+                                VStack(alignment: .trailing, spacing: 5) {
+                                    Text(deuda.pendiente.copFormatted)
+                                        .font(.system(size: 15, weight: .black, design: .rounded))
+
+                                    HStack(spacing: 6) {
                                         Button {
-                                            montoAbono = String(Int(deuda.cuota))
-                                            deudaSeleccionada = deuda
+                                            formNombre = deuda.nombre
+                                            formTotal = String(Int(deuda.total))
+                                            formPendiente = String(Int(deuda.pendiente))
+                                            formCuota = String(Int(deuda.cuota))
+                                            formIcono = deuda.icono
+                                            deudaEditar = deuda
                                         } label: {
-                                            Text("Abonar")
-                                                .font(.system(size: 11, weight: .bold, design: .rounded))
-                                                .padding(.horizontal, 10)
-                                                .padding(.vertical, 5)
-                                                .background(accent)
-                                                .foregroundColor(.white)
-                                                .clipShape(Capsule())
+                                            Image(systemName: "pencil")
+                                                .font(.system(size: 11, weight: .bold))
+                                                .frame(width: 26, height: 26)
+                                                .background(Color.primary.opacity(0.08))
+                                                .clipShape(Circle())
                                         }
                                         .buttonStyle(.plain)
+
+                                        if deuda.pendiente > 0 {
+                                            Button {
+                                                montoAbono = String(Int(deuda.cuota))
+                                                deudaSeleccionada = deuda
+                                            } label: {
+                                                Text("+ Abonar")
+                                                    .font(.system(size: 10, weight: .heavy, design: .rounded))
+                                                    .padding(.horizontal, 10)
+                                                    .padding(.vertical, 5)
+                                                    .background(accent)
+                                                    .foregroundColor(.white)
+                                                    .clipShape(Capsule())
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
                                     }
                                 }
                             }
-                        }
 
-                        ProgressView(value: deuda.porcentaje)
-                            .tint(deuda.pendiente <= 0 ? Color(hex: "#10B981") : accent)
-
-                        HStack {
-                            Text("Pagado: \(deuda.pagado.copFormatted) de \(deuda.total.copFormatted)")
-                            Spacer()
-                            Text(String(format: "%.1f%%", deuda.porcentaje * 100))
-                                .fontWeight(.heavy)
-                                .foregroundColor(accent)
+                            LiquidProgressBar(
+                                progress: deuda.porcentaje,
+                                colors: [accent, accent.opacity(0.75)],
+                                height: 7
+                            )
                         }
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundColor(.secondary)
-                    }
-                    .padding(.vertical, 6)
-                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                        Button {
-                            montoAbono = String(Int(deuda.cuota))
-                            deudaSeleccionada = deuda
-                        } label: {
-                            Label("Abonar", systemImage: "arrow.down.circle.fill")
-                        }
-                        .tint(Color(hex: "#10B981"))
-                    }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        Button(role: .destructive) {
-                            Task {
-                                await vm.sendAction([
-                                    "accion": "eliminar_deuda",
-                                    "deuda_eliminar": deuda.nombre
-                                ])
-                            }
-                        } label: {
-                            Label("Eliminar", systemImage: "trash.fill")
-                        }
-
-                        Button {
-                            formNombre = deuda.nombre
-                            formTotal = String(Int(deuda.total))
-                            formPendiente = String(Int(deuda.pendiente))
-                            formCuota = String(Int(deuda.cuota))
-                            formIcono = deuda.icono
-                            deudaEditar = deuda
-                        } label: {
-                            Label("Editar", systemImage: "pencil")
-                        }
-                        .tint(Color(hex: "#6366F1"))
-                    }
-                    .contextMenu {
-                        Button {
-                            Task {
-                                await vm.sendAction([
-                                    "accion": "abonar_deuda",
-                                    "deuda": deuda.nombre,
-                                    "monto": deuda.cuota
-                                ])
-                            }
-                        } label: {
-                            Label("Abonar Cuota Rápida (\(deuda.cuota.copFormatted))", systemImage: "bolt.fill")
-                        }
-
-                        Button {
-                            montoAbono = String(Int(deuda.cuota))
-                            deudaSeleccionada = deuda
-                        } label: {
-                            Label("Abonar Otro Monto...", systemImage: "banknote.fill")
-                        }
-
-                        Button {
-                            formNombre = deuda.nombre
-                            formTotal = String(Int(deuda.total))
-                            formPendiente = String(Int(deuda.pendiente))
-                            formCuota = String(Int(deuda.cuota))
-                            formIcono = deuda.icono
-                            deudaEditar = deuda
-                        } label: {
-                            Label("Editar Deuda", systemImage: "pencil")
-                        }
-
-                        Button(role: .destructive) {
-                            Task {
-                                await vm.sendAction([
-                                    "accion": "eliminar_deuda",
-                                    "deuda_eliminar": deuda.nombre
-                                ])
-                            }
-                        } label: {
-                            Label("Eliminar Deuda", systemImage: "trash")
-                        }
+                        .padding(16)
+                        .liquidGlass(cornerRadius: 26)
                     }
                 }
-            } header: {
-                Text("Auditoría de Deudas")
-            } footer: {
-                Text("Desliza una deuda a la derecha para abonar o mantén presionado para abono rápido de cuota.")
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 105)
             }
-        }
-        .listStyle(.insetGrouped)
-        .navigationTitle("Mis Deudas")
-        .refreshable {
-            await vm.fetchAllData()
+            .refreshable {
+                await vm.fetchAllData()
+            }
         }
         // SHEET ABONAR A DEUDA
         .sheet(item: $deudaSeleccionada) { d in
@@ -252,9 +207,6 @@ struct DeudasView: View {
                                 }
                                 QuickAmountChip(title: "$100.000") {
                                     montoAbono = "100000"
-                                }
-                                QuickAmountChip(title: "$226.500") {
-                                    montoAbono = "226500"
                                 }
                                 QuickAmountChip(title: "Liquidar Total") {
                                     montoAbono = String(Int(d.pendiente))
@@ -278,7 +230,7 @@ struct DeudasView: View {
                         } label: {
                             HStack {
                                 Spacer()
-                                Label("Confirmar Abono en pagos.xo.je", systemImage: "checkmark.seal.fill")
+                                Label("Confirmar Abono", systemImage: "checkmark.seal.fill")
                                     .fontWeight(.bold)
                                     .foregroundColor(Color(hex: "#10B981"))
                                 Spacer()
@@ -286,7 +238,7 @@ struct DeudasView: View {
                         }
                     }
                 }
-                .navigationTitle("Registrar Pago")
+                .navigationTitle("Registrar Abono")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
@@ -370,11 +322,11 @@ struct DeudasView: View {
                         TextField("Cuota Mensual ($)", text: $formCuota)
                             .keyboardType(.numberPad)
                         Picker("Ícono", selection: $formIcono) {
-                            Text("🏍️ Moto").tag("bike")
-                            Text("📱 Celular").tag("phone")
-                            Text("📺 TV").tag("tv")
-                            Text("🎓 Universidad").tag("graduation-cap")
-                            Text("💳 Tarjeta / Otro").tag("credit-card")
+                            Label("Motocicleta", systemImage: "bicycle").tag("bike")
+                            Label("Celular", systemImage: "iphone").tag("phone")
+                            Label("Televisor", systemImage: "tv.fill").tag("tv")
+                            Label("Universidad", systemImage: "graduationcap.fill").tag("graduation-cap")
+                            Label("Crédito / Tarjeta", systemImage: "creditcard.fill").tag("credit-card")
                         }
                     }
                     Section {
@@ -418,7 +370,7 @@ struct QuickAmountChip: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .background(Color(hex: "#6366F1").opacity(0.16))
-                .foregroundColor(Color(hex: "#818CF8"))
+                .foregroundColor(Color(hex: "#6366F1"))
                 .clipShape(Capsule())
         }
         .buttonStyle(LiquidScaleButtonStyle())

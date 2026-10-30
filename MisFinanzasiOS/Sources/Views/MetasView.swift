@@ -5,186 +5,143 @@ struct MetasView: View {
     @EnvironmentObject var vm: FinanzasViewModel
     @State private var showAbonoCorvanca = false
     @State private var montoCorvanca = "75000"
-
-    @State private var metaSeleccionada: MetaItem?
-    @State private var montoMeta = ""
-
-    @State private var showNuevaMeta = false
-    @State private var nombreNuevaMeta = ""
-    @State private var totalNuevaMeta = ""
-    @State private var iconoNuevaMeta = "target"
+    @State private var selectedPeriod = "1Q"
 
     var body: some View {
         let f = vm.finanzas
-        let aportesCorvanca = f.historial.filter { $0.concepto.localizedCaseInsensitiveContains("corvanca") }
+        let periods = ["1Q", "1M", "6M", "1A", "Futuro+"]
 
-        List {
-            // 1. FONDO DE AHORRO BASE (CORVANCA) EN VIVO ($1,575,000)
-            Section {
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack {
-                        Label("AHORRO BASE (CORVANCA)", systemImage: "building.columns.fill")
-                            .font(.system(size: 11, weight: .heavy, design: .rounded))
-                            .foregroundColor(.white.opacity(0.88))
-                        Spacer()
-                        Image(systemName: "checkmark.shield.fill")
-                            .foregroundColor(.white.opacity(0.85))
-                    }
+        ZStack {
+            LiquidGlassBackground()
 
-                    Text(f.ahorroCorvanca.copFormatted)
-                        .font(.system(size: 36, weight: .heavy, design: .rounded))
-                        .foregroundColor(.white)
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 16) {
 
-                    Text("Aporte quincenal en nómina: $75.000")
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .foregroundColor(.white.opacity(0.82))
-
-                    Button {
-                        montoCorvanca = "75000"
-                        showAbonoCorvanca = true
-                    } label: {
-                        Label("Abonar a Corvanca", systemImage: "plus.circle.fill")
-                            .font(.system(size: 13, weight: .bold, design: .rounded))
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 9)
-                            .background(Color.white)
-                            .foregroundColor(Color(hex: "#4F46E5"))
-                            .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(20)
-                .background(
-                    LinearGradient(
-                        colors: [Color(hex: "#4F46E5"), Color(hex: "#7C3AED")],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-                .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
-                .listRowBackground(Color.clear)
-            }
-
-            // 2. WISHLIST & METAS
-            Section {
-                if f.metasLista.isEmpty {
-                    VStack(spacing: 10) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 28))
-                            .foregroundColor(Color(hex: "#8B5CF6"))
-                        Text("No tienes metas en tu Wishlist ahora mismo")
-                            .font(.system(size: 14, weight: .bold, design: .rounded))
-                        Text("Crea una nueva meta personal para empezar a fondearla poco a poco.")
-                            .font(.system(size: 12, design: .rounded))
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                        Button {
-                            nombreNuevaMeta = ""
-                            totalNuevaMeta = ""
-                            iconoNuevaMeta = "target"
-                            showNuevaMeta = true
-                        } label: {
-                            Label("Crear Nueva Meta", systemImage: "plus.circle.fill")
-                                .font(.system(size: 13, weight: .bold, design: .rounded))
+                    // TARJETA HERO DE AHORRO CORVANCA CON BARRAS VERTICALES (Idéntica a Referencia #5 "$18,912.45")
+                    VStack(spacing: 14) {
+                        HStack(spacing: 5) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.secondary)
+                            Text("Fondo Corvanca · Creciendo cada quincena")
+                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                                .foregroundColor(.secondary)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(Color(hex: "#8B5CF6"))
+
+                        // Balance Gigante Centrado con Decimales ",00"
+                        HStack(alignment: .firstTextBaseline, spacing: 1) {
+                            Text(f.ahorroCorvanca.copFormatted)
+                                .font(.system(size: 40, weight: .black, design: .rounded))
+                                .minimumScaleFactor(0.75)
+                                .lineLimit(1)
+                            Text(",00")
+                                .font(.system(size: 20, weight: .heavy, design: .rounded))
+                                .foregroundColor(.secondary.opacity(0.6))
+                        }
+
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(Color(hex: "#10B981"))
+                                .frame(width: 8, height: 8)
+                            Text("+$150.000 ahorrados")
+                                .font(.system(size: 12, weight: .heavy, design: .rounded))
+                                .foregroundColor(Color(hex: "#10B981"))
+                            Text("este mes")
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundColor(.secondary)
+                        }
+
+                        // Callout Flotante estilo "Added $2,000 / Withdrew $40" de Referencia #5
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(spacing: 8) {
+                                ZStack {
+                                    Circle()
+                                        .fill(Color(hex: "#10B981"))
+                                        .frame(width: 18, height: 18)
+                                    Text("$")
+                                        .font(.system(size: 10, weight: .black, design: .rounded))
+                                        .foregroundColor(.white)
+                                }
+                                Text("Aporte Quincenal: +$75.000")
+                                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                            }
+
+                            HStack(spacing: 8) {
+                                ZStack {
+                                    Circle()
+                                        .fill(Color(hex: "#4F46E5"))
+                                        .frame(width: 18, height: 18)
+                                    Image(systemName: "arrow.up")
+                                        .font(.system(size: 9, weight: .black))
+                                        .foregroundColor(.white)
+                                }
+                                Text("Proyección Anual: \((f.ahorroCorvanca + 1_800_000).copFormatted)")
+                                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                            }
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(Color.primary.opacity(0.06))
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .padding(.top, 4)
+
+                        // Gráfico de Barras Píldora Verticales Lavanda/Índigo (Idéntico a Referencia #5)
+                        HStack(alignment: .bottom, spacing: 10) {
+                            SavingsBarColumn(label: "Ene", ratio: 0.46, isHighlighted: false)
+                            SavingsBarColumn(label: "Feb", ratio: 0.58, isHighlighted: false)
+                            SavingsBarColumn(label: "Actual", ratio: 0.85, isHighlighted: true)
+                            SavingsBarColumn(label: "Q1", ratio: 0.72, isHighlighted: false)
+                            SavingsBarColumn(label: "Q2", ratio: 0.88, isHighlighted: false)
+                            SavingsBarColumn(label: "Meta+", ratio: 1.0, isHighlighted: false)
+                        }
+                        .frame(height: 155)
+                        .padding(.horizontal, 6)
+                        .padding(.top, 6)
+
+                        // Selector de Periodo 1Q / 1M / 6M / 1A / Futuro+
+                        HStack {
+                            ForEach(periods, id: \.self) { p in
+                                Button {
+                                    selectedPeriod = p
+                                } label: {
+                                    Text(p)
+                                        .font(.system(size: 12, weight: .heavy, design: .rounded))
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 6)
+                                        .background(selectedPeriod == p ? Color.primary.opacity(0.09) : Color.clear)
+                                        .foregroundColor(selectedPeriod == p ? .primary : .secondary)
+                                        .clipShape(Capsule())
+                                }
+                                if p != periods.last { Spacer() }
+                            }
+                        }
+                        .padding(.top, 4)
+
+                        Button {
+                            montoCorvanca = "75000"
+                            showAbonoCorvanca = true
+                        } label: {
+                            Label("Sumar Depósito Quincenal ($75.000)", systemImage: "plus.circle.fill")
+                                .font(.system(size: 14, weight: .heavy, design: .rounded))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(Color(hex: "#4F46E5"))
+                                .foregroundColor(.white)
+                                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        }
+                        .buttonStyle(LiquidScaleButtonStyle())
                         .padding(.top, 4)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                } else {
-                    ForEach(f.metasLista) { meta in
-                        VStack(alignment: .leading, spacing: 10) {
-                            HStack {
-                                Image(systemName: SFIconMapper.symbol(for: meta.icono))
-                                    .foregroundColor(Color(hex: "#8B5CF6"))
-                                Text(meta.nombre)
-                                    .font(.system(size: 16, weight: .heavy, design: .rounded))
-                                Spacer()
-                                if meta.completada {
-                                    Text("¡Logrado! 🎉")
-                                        .font(.system(size: 12, weight: .heavy, design: .rounded))
-                                        .foregroundColor(Color(hex: "#10B981"))
-                                } else {
-                                    Button {
-                                        montoMeta = "100000"
-                                        metaSeleccionada = meta
-                                    } label: {
-                                        Text("Fondear")
-                                            .font(.system(size: 12, weight: .bold, design: .rounded))
-                                            .padding(.horizontal, 12)
-                                            .padding(.vertical, 5)
-                                            .background(Color(hex: "#8B5CF6").opacity(0.18))
-                                            .foregroundColor(Color(hex: "#8B5CF6"))
-                                            .clipShape(Capsule())
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-
-                            ProgressView(value: meta.porcentaje)
-                                .tint(Color(hex: "#8B5CF6"))
-
-                            HStack {
-                                Text(meta.actual.copFormatted)
-                                Spacer()
-                                Text(meta.total.copFormatted)
-                            }
-                            .font(.system(size: 11, weight: .semibold, design: .rounded))
-                            .foregroundColor(.secondary)
-                        }
-                        .padding(.vertical, 4)
-                        .swipeActions(edge: .trailing) {
-                            Button(role: .destructive) {
-                                Task {
-                                    await vm.sendAction([
-                                        "accion": "eliminar_meta",
-                                        "meta_eliminar": meta.nombre
-                                    ])
-                                }
-                            } label: {
-                                Label("Eliminar", systemImage: "trash.fill")
-                            }
-                        }
-                    }
-
-                    Button {
-                        nombreNuevaMeta = ""
-                        totalNuevaMeta = ""
-                        iconoNuevaMeta = "target"
-                        showNuevaMeta = true
-                    } label: {
-                        Label("Añadir Otra Meta", systemImage: "plus.circle.fill")
-                            .font(.system(size: 14, weight: .bold, design: .rounded))
-                    }
+                    .padding(22)
+                    .liquidGlass(cornerRadius: 32)
                 }
-            } header: {
-                Text("Wishlist & Metas")
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 105)
             }
-
-            // 3. HISTORIAL DE APORTES CORVANCA
-            if !aportesCorvanca.isEmpty {
-                Section("Últimos Aportes a Corvanca") {
-                    ForEach(aportesCorvanca.prefix(8)) { h in
-                        HStack {
-                            Label(h.fecha, systemImage: "leaf.fill")
-                                .font(.system(size: 13, weight: .medium, design: .rounded))
-                                .foregroundColor(.secondary)
-                            Spacer()
-                            Text("+\(h.monto.copFormatted)")
-                                .font(.system(size: 14, weight: .heavy, design: .rounded))
-                                .foregroundColor(Color(hex: "#10B981"))
-                        }
-                    }
-                }
+            .refreshable {
+                await vm.fetchAllData()
             }
-        }
-        .listStyle(.insetGrouped)
-        .navigationTitle("Metas y Ahorro")
-        .refreshable {
-            await vm.fetchAllData()
         }
         .sheet(isPresented: $showAbonoCorvanca) {
             NavigationStack {
@@ -193,34 +150,19 @@ struct MetasView: View {
                         TextField("Monto a sumar ($)", text: $montoCorvanca)
                             .keyboardType(.numberPad)
                             .font(.system(size: 20, weight: .heavy, design: .rounded))
-
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                QuickAmountChip(title: "$75.000") { montoCorvanca = "75000" }
-                                QuickAmountChip(title: "$150.000") { montoCorvanca = "150000" }
-                                QuickAmountChip(title: "$300.000") { montoCorvanca = "300000" }
-                            }
-                            .padding(.vertical, 4)
-                        }
                     }
                     Section {
-                        Button {
+                        Button("Confirmar Depósito") {
                             guard let val = Double(montoCorvanca), val > 0 else { return }
                             Task {
                                 await vm.sendAction(["accion": "abonar_ahorro", "monto": val])
                                 showAbonoCorvanca = false
                             }
-                        } label: {
-                            HStack {
-                                Spacer()
-                                Label("Abonar en pagos.xo.je", systemImage: "checkmark.circle.fill")
-                                    .fontWeight(.bold)
-                                Spacer()
-                            }
                         }
+                        .fontWeight(.bold)
                     }
                 }
-                .navigationTitle("Aporte Corvanca")
+                .navigationTitle("Depósito Corvanca")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
@@ -230,91 +172,54 @@ struct MetasView: View {
             }
             .presentationDetents([.medium])
         }
-        .sheet(item: $metaSeleccionada) { m in
-            NavigationStack {
-                Form {
-                    Section("Fondear \(m.nombre)") {
-                        TextField("Monto a inyectar ($)", text: $montoMeta)
-                            .keyboardType(.numberPad)
-                            .font(.system(size: 20, weight: .heavy, design: .rounded))
-                    }
-                    Section {
-                        Button {
-                            guard let val = Double(montoMeta), val > 0 else { return }
-                            Task {
-                                await vm.sendAction([
-                                    "accion": "abonar_meta",
-                                    "meta": m.nombre,
-                                    "monto": val
-                                ])
-                                metaSeleccionada = nil
+    }
+}
+
+struct SavingsBarColumn: View {
+    let label: String
+    let ratio: CGFloat
+    let isHighlighted: Bool
+
+    var body: some View {
+        VStack(spacing: 6) {
+            GeometryReader { geo in
+                VStack {
+                    Spacer()
+                    ZStack(alignment: .bottom) {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(
+                                isHighlighted
+                                    ? LinearGradient(
+                                        colors: [Color(hex: "#818CF8"), Color(hex: "#4F46E5")],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                    : LinearGradient(
+                                        colors: [Color(hex: "#6366F1").opacity(0.18), Color(hex: "#6366F1").opacity(0.12)],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                            )
+                            .frame(height: max(24, geo.size.height * ratio))
+
+                        if isHighlighted {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.white)
+                                    .frame(width: 20, height: 20)
+                                Text("$")
+                                    .font(.system(size: 11, weight: .black, design: .rounded))
+                                    .foregroundColor(Color(hex: "#10B981"))
                             }
-                        } label: {
-                            HStack {
-                                Spacer()
-                                Label("Fondear Meta", systemImage: "sparkles")
-                                    .fontWeight(.bold)
-                                Spacer()
-                            }
+                            .padding(.bottom, 6)
                         }
-                    }
-                }
-                .navigationTitle("Fondear Meta")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancelar") { metaSeleccionada = nil }
                     }
                 }
             }
-            .presentationDetents([.medium])
+            Text(label)
+                .font(.system(size: 10, weight: isHighlighted ? .heavy : .semibold, design: .rounded))
+                .foregroundColor(isHighlighted ? Color(hex: "#4F46E5") : .secondary)
         }
-        .sheet(isPresented: $showNuevaMeta) {
-            NavigationStack {
-                Form {
-                    Section("Nueva Meta de Ahorro") {
-                        TextField("¿Qué quieres lograr?", text: $nombreNuevaMeta)
-                        TextField("Costo Total ($)", text: $totalNuevaMeta)
-                            .keyboardType(.numberPad)
-                        Picker("Ícono", selection: $iconoNuevaMeta) {
-                            Text("🎯 Objetivo").tag("target")
-                            Text("✈️ Viaje").tag("plane")
-                            Text("🏠 Casa / Hogar").tag("home")
-                            Text("🚗 Vehículo").tag("car")
-                            Text("📱 Tecnología").tag("smartphone")
-                        }
-                    }
-                    Section {
-                        Button {
-                            guard !nombreNuevaMeta.isEmpty, let tot = Double(totalNuevaMeta), tot > 0 else { return }
-                            Task {
-                                await vm.sendAction([
-                                    "accion": "agregar_meta",
-                                    "nombre_meta": nombreNuevaMeta,
-                                    "total_meta": tot,
-                                    "icono_meta": iconoNuevaMeta
-                                ])
-                                showNuevaMeta = false
-                            }
-                        } label: {
-                            HStack {
-                                Spacer()
-                                Label("Crear Meta", systemImage: "checkmark.circle.fill")
-                                    .fontWeight(.bold)
-                                Spacer()
-                            }
-                        }
-                    }
-                }
-                .navigationTitle("Crear Meta")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancelar") { showNuevaMeta = false }
-                    }
-                }
-            }
-            .presentationDetents([.medium])
-        }
+        .frame(maxWidth: .infinity)
     }
 }

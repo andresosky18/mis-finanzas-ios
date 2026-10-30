@@ -3,7 +3,7 @@ import SwiftUI
 @main
 struct MisFinanzasApp: App {
     @StateObject private var vm = FinanzasViewModel()
-    @AppStorage("ios_dark_mode") private var isDarkMode: Bool = true
+    @AppStorage("ios_dark_mode") private var isDarkMode: Bool = false
 
     var body: some Scene {
         WindowGroup {

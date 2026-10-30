@@ -3,22 +3,21 @@ import UIKit
 
 struct MainTabView: View {
     @EnvironmentObject var vm: FinanzasViewModel
-    @AppStorage("ios_dark_mode") private var isDarkMode: Bool = true
+    @AppStorage("ios_dark_mode") private var isDarkMode: Bool = false
     @State private var showServerSettings = false
     @State private var selectedTab: Int = 0
 
-    // IMPORTANTE: No sobreescribir UITabBar.appearance() ni UINavigationBar.appearance()
-    // para que iOS 26 / iOS 27 active automáticamente la barra TabView flotante en cápsula
-    // Liquid Glass y los botones superiores flotantes nativos del sistema.
+    // iOS 26 / iOS 27 activa automáticamente la barra TabView flotante en cápsula Liquid Glass
+    // cuando el binario está estampado con SDK 26.0 y UIDesignRequiresCompatibility = false.
 
     var body: some View {
         TabView(selection: $selectedTab) {
             NavigationStack {
-                ResumenView()
+                ResumenView(selectedTab: $selectedTab)
                     .toolbar { toolbarButtons }
             }
             .tabItem {
-                Label("Resumen", systemImage: "square.grid.2x2.fill")
+                Label("Inicio", systemImage: "house.fill")
             }
             .tag(0)
 
@@ -27,7 +26,7 @@ struct MainTabView: View {
                     .toolbar { toolbarButtons }
             }
             .tabItem {
-                Label("Quincena", systemImage: "checklist")
+                Label("Pagos", systemImage: "checklist")
             }
             .tag(1)
 
@@ -45,11 +44,11 @@ struct MainTabView: View {
                     .toolbar { toolbarButtons }
             }
             .tabItem {
-                Label("Metas", systemImage: "sparkles")
+                Label("Ahorro", systemImage: "chart.bar.fill")
             }
             .tag(3)
         }
-        .tint(Color(hex: "#6366F1"))
+        .tint(Color(hex: "#4F46E5"))
         .onChange(of: selectedTab) { _ in
             vm.triggerHaptic(.light)
         }
@@ -61,14 +60,21 @@ struct MainTabView: View {
 
     @ToolbarContentBuilder
     private var toolbarButtons: some ToolbarContent {
+        // Cápsula Izquierda estilo "Household / Good Morning" con Logo Oficial AW
         ToolbarItem(placement: .topBarLeading) {
-            HStack(spacing: 8) {
-                AWLogoView(size: 28, cornerRadius: 8)
-                Text("Mis Finanzas")
-                    .font(.system(size: 16, weight: .heavy, design: .rounded))
+            HStack(spacing: 9) {
+                AWLogoView(size: 30, cornerRadius: 15)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Hola, Andrés")
+                        .font(.system(size: 13, weight: .heavy, design: .rounded))
+                    Text("Mis Finanzas")
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .foregroundColor(.secondary)
+                }
             }
         }
 
+        // Cápsula Derecha Unida "+  •••" (Idéntica a la referencia iOS 27 Household)
         ToolbarItemGroup(placement: .topBarTrailing) {
             Button {
                 Task { await vm.fetchAllData() }
@@ -80,25 +86,22 @@ struct MainTabView: View {
                 }
             }
 
-            Button {
-                vm.triggerHaptic(.light)
-                isDarkMode.toggle()
-            } label: {
-                Image(systemName: isDarkMode ? "sun.max.fill" : "moon.stars.fill")
-            }
-
             Menu {
-                Section(vm.syncStatusText) {
+                Section("Apariencia y Seguridad") {
                     Button {
-                        Task { await vm.fetchAllData() }
+                        vm.triggerHaptic(.light)
+                        isDarkMode.toggle()
                     } label: {
-                        Label("Sincronizar con pagos.xo.je", systemImage: "arrow.triangle.2.circlepath")
+                        Label(
+                            isDarkMode ? "Cambiar a Modo Claro" : "Cambiar a Modo Oscuro",
+                            systemImage: isDarkMode ? "sun.max.fill" : "moon.stars.fill"
+                        )
                     }
 
                     Button {
                         showServerSettings = true
                     } label: {
-                        Label("Ajustes de Servidor y PIN", systemImage: "server.rack")
+                        Label("Configurar PIN y Conexión", systemImage: "slider.horizontal.3")
                     }
                 }
 
@@ -109,17 +112,16 @@ struct MainTabView: View {
                             vm.isUnlocked = false
                         }
                     } label: {
-                        Label("Bloquear App", systemImage: "lock.fill")
+                        Label("Bloquear Billetera", systemImage: "lock.fill")
                     }
                 }
             } label: {
-                Image(systemName: "ellipsis.circle")
+                Image(systemName: "ellipsis")
             }
         }
     }
 }
 
-// MARK: - Hoja de Ajustes de Servidor (Preconfigurada con pagos.xo.je)
 struct ServerSettingsSheet: View {
     @EnvironmentObject var vm: FinanzasViewModel
     @Environment(\.dismiss) private var dismiss
@@ -127,20 +129,16 @@ struct ServerSettingsSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    TextField("http://pagos.xo.je/mis_finanzas.php?i=1", text: $vm.apiURL)
+                Section("PIN de Seguridad") {
+                    SecureField("Código PIN (4 dígitos)", text: $vm.savedPin)
+                        .keyboardType(.numberPad)
+                }
+
+                Section("Servidor en la Nube") {
+                    TextField("URL de sincronización", text: $vm.apiURL)
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                } header: {
-                    Text("Servidor Conectado en Vivo")
-                } footer: {
-                    Text("Conectado directamente a tu base de datos real en pagos.xo.je.")
-                }
-
-                Section("PIN de Desbloqueo") {
-                    SecureField("Código PIN (por defecto 1234)", text: $vm.savedPin)
-                        .keyboardType(.numberPad)
                 }
 
                 Section {
@@ -152,14 +150,14 @@ struct ServerSettingsSheet: View {
                     } label: {
                         HStack {
                             Spacer()
-                            Label("Sincronizar Ahora", systemImage: "checkmark.circle.fill")
+                            Label("Guardar y Sincronizar", systemImage: "checkmark.circle.fill")
                                 .fontWeight(.bold)
                             Spacer()
                         }
                     }
                 }
             }
-            .navigationTitle("Conexión pagos.xo.je")
+            .navigationTitle("Ajustes")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
