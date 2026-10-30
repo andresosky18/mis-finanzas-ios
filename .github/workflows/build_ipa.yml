@@ -16,37 +16,44 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Verificar XcodeGen y Generar Proyecto Xcode (.xcodeproj)
+      - name: Compilar Binario Nativo iOS (SwiftUI arm64) y Empaquetar .ipa
         working-directory: MisFinanzasiOS
         run: |
-          if ! command -v xcodegen &> /dev/null; then
-            brew install xcodegen
+          set -e
+          SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
+          echo "Usando iOS SDK: $SDK_PATH"
+
+          rm -rf Payload MisFinanzas.ipa
+          mkdir -p Payload/MisFinanzas.app
+
+          if ! xcrun --sdk iphoneos swiftc \
+            -target arm64-apple-ios16.0 \
+            -sdk "$SDK_PATH" \
+            -O \
+            -parse-as-library \
+            Sources/MisFinanzasApp.swift \
+            Sources/Models/FinanzasModels.swift \
+            Sources/Services/FinanzasViewModel.swift \
+            Sources/Views/MainTabView.swift \
+            Sources/Views/ResumenView.swift \
+            Sources/Views/QuincenaView.swift \
+            Sources/Views/DeudasView.swift \
+            Sources/Views/MetasView.swift \
+            -o Payload/MisFinanzas.app/MisFinanzas 2> build_err.log; then
+              cat build_err.log
+              ERR_MSG=$(cat build_err.log | tr '\n' ' ')
+              echo "::error::$ERR_MSG"
+              exit 1
           fi
-          xcodegen generate
 
-      - name: Compilar App iOS (Release)
-        working-directory: MisFinanzasiOS
-        run: |
-          xcodebuild clean build \
-            -project MisFinanzas.xcodeproj \
-            -target MisFinanzas \
-            -configuration Release \
-            -sdk iphoneos \
-            SYMROOT="$PWD/build" \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            AD_HOC_CODE_SIGNING_ALLOWED=YES
+          chmod +x Payload/MisFinanzas.app/MisFinanzas
+          cp Sources/Info.plist Payload/MisFinanzas.app/Info.plist
+          plutil -convert binary1 Payload/MisFinanzas.app/Info.plist
+          echo -n "APPL????" > Payload/MisFinanzas.app/PkgInfo
 
-      - name: Firmar Ad-Hoc para compatibilidad con SideStore y empaquetar .ipa
-        working-directory: MisFinanzasiOS
-        run: |
-          APP_PATH=$(find build -name "MisFinanzas.app" -type d | head -n 1)
-          echo "App encontrada en: $APP_PATH"
-          codesign --force --deep --sign - "$APP_PATH"
-          mkdir -p Payload
-          cp -r "$APP_PATH" Payload/
+          codesign --force --deep --sign - Payload/MisFinanzas.app
           zip -r9 MisFinanzas.ipa Payload
+          ls -lh MisFinanzas.ipa
 
       - name: Subir Artifact MisFinanzas.ipa
         uses: actions/upload-artifact@v4
