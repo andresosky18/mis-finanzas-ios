@@ -1,0 +1,80 @@
+{
+    "fecha_corte": "18 DE OCTUBRE",
+    "cuota_mes": 372875,
+    "cuota_adelanto": 0,
+    "items_mes": "Dron nu\r\nReloj\r\nInteres\r\nPizza \r\nMcdonalds mc cafe",
+    "items_adelanto": "\u2022 Cuota programada correspondiente al adelanto de efectivo",
+    "pin_acceso": "1234",
+    "camara_act": 6,
+    "camara_tot": 6,
+    "comida_act": 1,
+    "comida_tot": 2,
+    "juego_act": 5,
+    "juego_tot": 6,
+    "dron_act": 4,
+    "dron_tot": 18,
+    "memoria_act": 4,
+    "memoria_tot": 5,
+    "adelanto_act": 1,
+    "adelanto_tot": 2,
+    "lineas_credito": [
+        {
+            "id": "dron",
+            "nombre": "Dron + Memoria",
+            "icono": "plane",
+            "color": "#3b82f6"
+        },
+        {
+            "id": "reloj",
+            "nombre": "Reloj",
+            "icono": "watch",
+            "color": "#f2c10d"
+        }
+    ],
+    "cuotas_dinamicas": [
+        {
+            "nombre": "Dron",
+            "icono": "plane",
+            "act": 7,
+            "tot": 18
+        },
+        {
+            "nombre": "reloj",
+            "icono": "watch",
+            "act": 3,
+            "tot": 18
+        }
+    ],
+    "facturacion_items": [
+        {
+            "nombre": "Dron nu",
+            "monto": 0,
+            "categoria": "dron",
+            "pagado": false
+        },
+        {
+            "nombre": "Reloj",
+            "monto": 0,
+            "categoria": "reloj",
+            "pagado": false
+        },
+        {
+            "nombre": "Interes",
+            "monto": 0,
+            "categoria": "dron",
+            "pagado": false
+        },
+        {
+            "nombre": "Pizza",
+            "monto": 0,
+            "categoria": "dron",
+            "pagado": false
+        },
+        {
+            "nombre": "Mcdonalds mc cafe",
+            "monto": 0,
+            "categoria": "dron",
+            "pagado": false
+        }
+    ]
+}

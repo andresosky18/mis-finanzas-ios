@@ -1,0 +1,6 @@
+# Proteger credenciales reales de la base de datos en GitHub
+conexion.php
+.DS_Store
+build/
+Payload/
+*.ipa

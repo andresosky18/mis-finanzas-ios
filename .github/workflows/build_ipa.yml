@@ -1,0 +1,60 @@
+name: Build iOS Native IPA (SideStore & AltStore)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+permissions:
+  contents: write
+
+jobs:
+  build-ios-ipa:
+    name: Compilar App Nativa SwiftUI (.ipa para SideStore)
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Instalar XcodeGen
+        run: brew install xcodegen
+
+      - name: Generar Proyecto Xcode (.xcodeproj)
+        working-directory: MisFinanzasiOS
+        run: xcodegen generate
+
+      - name: Compilar App iOS (Release)
+        working-directory: MisFinanzasiOS
+        run: |
+          xcodebuild clean build \
+            -project MisFinanzas.xcodeproj \
+            -scheme MisFinanzas \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Firmar Ad-Hoc para compatibilidad con SideStore y empaquetar .ipa
+        working-directory: MisFinanzasiOS
+        run: |
+          APP_PATH="build/Build/Products/Release-iphoneos/MisFinanzas.app"
+          codesign --force --deep --sign - "$APP_PATH"
+          mkdir -p Payload
+          cp -r "$APP_PATH" Payload/
+          zip -r9 MisFinanzas.ipa Payload
+
+      - name: Subir Artifact MisFinanzas.ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: MisFinanzas-SideStore-IPA
+          path: MisFinanzasiOS/MisFinanzas.ipa
+
+      - name: Publicar en GitHub Releases (Descarga directa desde iPhone para SideStore)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: "Mis Finanzas iOS v1.0.${{ github.run_number }} (SideStore IPA)"
+          body: "Descarga `MisFinanzas.ipa` directamente en tu iPhone y ábrelo en **SideStore** (pestaña My Apps -> botón `+`)."
+          files: MisFinanzasiOS/MisFinanzas.ipa
