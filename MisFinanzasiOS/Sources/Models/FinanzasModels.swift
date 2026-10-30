@@ -1,20 +1,18 @@
 import Foundation
 import SwiftUI
 
-// MARK: - Respuesta Principal de api_finanzas.php
+// MARK: - Respuesta Principal de api_finanzas.php (Exclusivo Mis Finanzas)
 struct ApiResponse: Codable {
     let ok: Bool
     let requirePin: Bool?
     let error: String?
     let finanzas: FinanzasData?
-    let creditosNu: CreditosNuData?
 
     enum CodingKeys: String, CodingKey {
         case ok
         case requirePin = "require_pin"
         case error
         case finanzas
-        case creditosNu = "creditos_nu"
     }
 }
 
@@ -133,71 +131,6 @@ struct HistorialItem: Codable, Identifiable {
         case deudaKey = "deuda_key"
         case gastoOrigen = "gasto_origen"
     }
-}
-
-// MARK: - Modelo de Créditos Nu (index.php)
-struct CreditosNuData: Codable {
-    var saldoPendiente: Double
-    var fechaCorte: String
-    var cuotaMes: Double
-    var lineasCredito: [LineaCreditoNu]
-    var cuotasDinamicas: [CuotaDinamicaNu]
-    var facturacionItems: [FacturaItemNu]
-    var movimientos: [MovimientoNu]
-
-    enum CodingKeys: String, CodingKey {
-        case saldoPendiente = "saldo_pendiente"
-        case fechaCorte = "fecha_corte"
-        case cuotaMes = "cuota_mes"
-        case lineasCredito = "lineas_credito"
-        case cuotasDinamicas = "cuotas_dinamicas"
-        case facturacionItems = "facturacion_items"
-        case movimientos
-    }
-}
-
-struct LineaCreditoNu: Codable, Identifiable {
-    var id: String
-    var nombre: String
-    var icono: String
-    var color: String
-    var stats: LineaStatsNu?
-}
-
-struct LineaStatsNu: Codable {
-    var deudas: Double
-    var pagos: Double
-    var saldo: Double
-}
-
-struct CuotaDinamicaNu: Codable, Identifiable {
-    var id: String { nombre }
-    var nombre: String
-    var icono: String
-    var act: Int
-    var tot: Int
-
-    var porcentaje: Double {
-        guard tot > 0 else { return 0 }
-        return min(1.0, max(0.0, Double(act) / Double(tot)))
-    }
-}
-
-struct FacturaItemNu: Codable, Identifiable {
-    var id: String { "\(nombre)-\(categoria ?? "")" }
-    var nombre: String
-    var monto: Double
-    var categoria: String?
-    var pagado: Bool
-}
-
-struct MovimientoNu: Codable, Identifiable {
-    var id: Int
-    var tipo: String
-    var monto: Double
-    var concepto: String
-    var categoria: String
-    var fecha: String
 }
 
 // MARK: - Extensiones de Formato COP y Símbolos SF Nativos de Apple

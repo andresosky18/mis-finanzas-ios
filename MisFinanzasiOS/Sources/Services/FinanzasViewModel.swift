@@ -3,7 +3,7 @@ import SwiftUI
 import LocalAuthentication
 import WebKit
 
-// MARK: - puente invisible para resolver cookie anti-bot (__test) de InfinityFree
+// MARK: - Puente invisible para resolver cookie anti-bot (__test) de InfinityFree
 final class InfinityFreeCookieResolver: NSObject, WKNavigationDelegate {
     private var webView: WKWebView?
     private var continuation: CheckedContinuation<Void, Never>?
@@ -18,7 +18,6 @@ final class InfinityFreeCookieResolver: NSObject, WKNavigationDelegate {
             self.webView = wv
             wv.load(URLRequest(url: url))
 
-            // Timeout de seguridad de 4 segundos
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 4_000_000_000)
                 self.finish()
@@ -27,7 +26,6 @@ final class InfinityFreeCookieResolver: NSObject, WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        // Extraer cookies de WKHTTPCookieStore hacia HTTPCookieStorage.shared para URLSession
         webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in
             for cookie in cookies {
                 HTTPCookieStorage.shared.setCookie(cookie)
@@ -47,7 +45,7 @@ final class InfinityFreeCookieResolver: NSObject, WKNavigationDelegate {
     }
 }
 
-// MARK: - ViewModel Principal Nativo SwiftUI
+// MARK: - ViewModel Principal Nativo SwiftUI (Exclusivo Mis Finanzas)
 @MainActor
 final class FinanzasViewModel: ObservableObject {
     @AppStorage("finanzas_api_url") var apiURL: String = "https://tu-dominio.infinityfreeapp.com/api_finanzas.php"
@@ -55,21 +53,14 @@ final class FinanzasViewModel: ObservableObject {
     @AppStorage("finanzas_is_unlocked") var isUnlocked: Bool = false
 
     @Published var finanzas: FinanzasData?
-    @Published var creditosNu: CreditosNuData?
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
 
-    private let cacheKey = "finanzas_offline_cache_v1"
+    private let cacheKey = "finanzas_personal_cache_v2"
     private let cookieResolver = InfinityFreeCookieResolver()
 
     init() {
         loadFromLocalCache()
-    }
-
-    // URL base para abrir recibo.php?id=X
-    func reciboURL(id: Int) -> URL? {
-        let base = apiURL.replacingOccurrences(of: "api_finanzas.php", with: "recibo.php?id=\(id)")
-        return URL(string: base)
     }
 
     // MARK: - Desbloqueo con Face ID Nativo o PIN
@@ -78,7 +69,7 @@ final class FinanzasViewModel: ObservableObject {
         var error: NSError?
 
         if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) {
-            let reason = "Desbloquea tu billetera de Mis Finanzas"
+            let reason = "Desbloquea tu billetera personal de Mis Finanzas"
             context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason) { success, _ in
                 Task { @MainActor in
                     if success {
@@ -161,7 +152,6 @@ final class FinanzasViewModel: ObservableObject {
             throw NSError(domain: "Auth", code: 401, userInfo: [NSLocalizedDescriptionKey: "PIN incorrecto o sesión expirada."])
         }
 
-        // Si InfinityFree devuelve el reto anti-bot HTML (aes.js) en vez de JSON, resolver cookie automáticamente
         if let rawText = String(data: data, encoding: .utf8),
            (rawText.contains("aes.js") || rawText.contains("__test=")) && !isRetry {
             await cookieResolver.resolveCookieIfNeeded(for: url)
@@ -183,7 +173,6 @@ final class FinanzasViewModel: ObservableObject {
     private func applyResponse(_ response: ApiResponse) {
         if response.ok {
             if let f = response.finanzas { self.finanzas = f }
-            if let nu = response.creditosNu { self.creditosNu = nu }
             saveToLocalCache(response)
         } else if let err = response.error {
             self.errorMessage = err
@@ -201,7 +190,6 @@ final class FinanzasViewModel: ObservableObject {
         guard let data = UserDefaults.standard.data(forKey: cacheKey),
               let cached = try? JSONDecoder().decode(ApiResponse.self, from: data) else { return }
         self.finanzas = cached.finanzas
-        self.creditosNu = cached.creditosNu
     }
 
     // MARK: - Vibración Háptica Nativa de iOS

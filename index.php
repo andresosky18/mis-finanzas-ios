@@ -409,8 +409,6 @@ if (count($totales_lineas) >= 3) {
         <a href="#seccion-creditos" class="nav-icon" title="Líneas de Crédito"><i data-lucide="wallet"></i></a>
         <a href="#seccion-facturas" class="nav-icon" title="Facturación del Período"><i data-lucide="credit-card"></i></a>
         <a href="#seccion-movimientos" class="nav-icon" title="Movimientos"><i data-lucide="pie-chart"></i></a>
-        <a href="mis_finanzas.php" class="nav-icon" title="Mis Finanzas Personales"><i data-lucide="landmark"></i></a>
-        <a href="admin.php" class="nav-icon" title="Administrar Panel"><i data-lucide="settings"></i></a>
     </div>
 
     <!-- MAIN CONTENT -->

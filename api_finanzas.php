@@ -41,7 +41,7 @@ if (empty($_SESSION['auth_pin_ok']) && $pin_enviado !== $pin_sistema) {
 }
 $_SESSION['auth_pin_ok'] = true;
 
-// Cargar datos de mi_billetera (ID 3)
+// Cargar datos exclusivos de mi_billetera (ID 3 - Mis Finanzas Personales)
 $conn->query("CREATE TABLE IF NOT EXISTS mi_billetera (id INT PRIMARY KEY, datos TEXT)");
 $result = $conn->query("SELECT datos FROM mi_billetera WHERE id = 3");
 
@@ -124,7 +124,6 @@ function resolverDeudaDeGastoApi($nombre_gasto, $gasto_info, $deudas) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($req['accion'])) {
     $accion = $req['accion'];
     $fecha_actual = date('Y-m-d H:i');
-    $guardar_billetera = true;
 
     if ($accion === 'toggle_gasto') {
         $gasto = $req['gasto'] ?? '';
@@ -263,62 +262,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($req['accion'])) {
     } elseif ($accion === 'editar_sueldo') {
         $data['sueldo_base'] = floatval($req['nuevo_sueldo'] ?? $data['sueldo_base']);
         $data['bono_q1'] = floatval($req['nuevo_bono'] ?? $data['bono_q1']);
-    } elseif ($accion === 'abonar_factura_nu') {
-        $guardar_billetera = false;
-        $monto_nu = floatval($req['monto'] ?? ($config['cuota_mes'] ?? 0));
-        $cat_nu = trim($req['categoria'] ?? ($config['lineas_credito'][0]['id'] ?? 'dron'));
-        $concepto_nu = trim($req['concepto'] ?? ("Abono Factura " . ($config['fecha_corte'] ?? 'Mes')));
-        if ($monto_nu > 0) {
-            $tipo_m = 'pago';
-            $stmt = $conn->prepare("INSERT INTO movimientos (tipo, monto, concepto, categoria) VALUES (?, ?, ?, ?)");
-            $stmt->bind_param("sdss", $tipo_m, $monto_nu, $concepto_nu, $cat_nu);
-            $stmt->execute();
-            $stmt->close();
-
-            $config['cuota_mes'] = max(0, (float)($config['cuota_mes'] ?? 0) - $monto_nu);
-            if ($config['cuota_mes'] == 0 && isset($config['facturacion_items'])) {
-                foreach ($config['facturacion_items'] as $k => $v) {
-                    $config['facturacion_items'][$k]['pagado'] = true;
-                }
-            }
-            if (!empty($req['avanzar_cuotas']) && isset($config['cuotas_dinamicas'])) {
-                foreach ($config['cuotas_dinamicas'] as $k => $cd) {
-                    if ($cd['act'] < $cd['tot']) {
-                        $config['cuotas_dinamicas'][$k]['act']++;
-                    }
-                }
-            }
-            file_put_contents($archivo_config, json_encode($config, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
-        }
-    } elseif ($accion === 'pagar_item_nu') {
-        $guardar_billetera = false;
-        $idx = intval($req['item_index'] ?? -1);
-        if (isset($config['facturacion_items'][$idx]) && empty($config['facturacion_items'][$idx]['pagado'])) {
-            $it = $config['facturacion_items'][$idx];
-            $mto = floatval($it['monto'] ?? 0);
-            $cat = $it['categoria'] ?? ($config['lineas_credito'][0]['id'] ?? 'dron');
-            $config['facturacion_items'][$idx]['pagado'] = true;
-            if ($mto > 0) {
-                $concepto = "Pago Factura: " . $it['nombre'];
-                $tipo_m = 'pago';
-                $stmt = $conn->prepare("INSERT INTO movimientos (tipo, monto, concepto, categoria) VALUES (?, ?, ?, ?)");
-                $stmt->bind_param("sdss", $tipo_m, $mto, $concepto, $cat);
-                $stmt->execute();
-                $stmt->close();
-                $config['cuota_mes'] = max(0, (float)($config['cuota_mes'] ?? 0) - $mto);
-            }
-            file_put_contents($archivo_config, json_encode($config, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
-        }
     }
 
-    if ($guardar_billetera) {
-        $data['historial'] = array_slice($data['historial'], 0, 30);
-        $json_update = json_encode($data, JSON_UNESCAPED_UNICODE);
-        $stmt_u = $conn->prepare("UPDATE mi_billetera SET datos = ? WHERE id = 3");
-        $stmt_u->bind_param("s", $json_update);
-        $stmt_u->execute();
-        $stmt_u->close();
-    }
+    $data['historial'] = array_slice($data['historial'], 0, 30);
+    $json_update = json_encode($data, JSON_UNESCAPED_UNICODE);
+    $stmt_u = $conn->prepare("UPDATE mi_billetera SET datos = ? WHERE id = 3");
+    $stmt_u->bind_param("s", $json_update);
+    $stmt_u->execute();
+    $stmt_u->close();
 }
 
 // CALCULAR RESUMEN PARA LA APP MÓVIL NATIVA SWIFTUI
@@ -380,35 +331,6 @@ foreach ($data['metas'] as $nombre_m => $m) {
     ];
 }
 
-// Datos de Créditos Nu (index.php)
-function obtenerTotalesApi($conn, $categoria = null) {
-    $filtro = $categoria ? "AND LOWER(TRIM(categoria)) = LOWER(TRIM('" . $conn->real_escape_string($categoria) . "'))" : "";
-    $deudas = $conn->query("SELECT SUM(monto) AS total FROM movimientos WHERE LOWER(TRIM(tipo)) IN ('deuda', 'interes', 'ajuste') $filtro")->fetch_assoc()['total'] ?? 0;
-    $pagos = $conn->query("SELECT SUM(monto) AS total FROM movimientos WHERE LOWER(TRIM(tipo)) = 'pago' $filtro")->fetch_assoc()['total'] ?? 0;
-    return ['deudas' => (float)$deudas, 'pagos' => (float)$pagos, 'saldo' => (float)$deudas - (float)$pagos];
-}
-
-$nu_global = obtenerTotalesApi($conn);
-$nu_lineas = [];
-foreach (($config['lineas_credito'] ?? []) as $lc) {
-    $lc['stats'] = obtenerTotalesApi($conn, $lc['id']);
-    $nu_lineas[] = $lc;
-}
-$nu_movs = [];
-$q_mov = $conn->query("SELECT id, tipo, monto, concepto, categoria, fecha FROM movimientos WHERE LOWER(TRIM(tipo)) != 'ajuste' ORDER BY fecha DESC LIMIT 20");
-if ($q_mov) {
-    while ($m = $q_mov->fetch_assoc()) {
-        $nu_movs[] = [
-            'id' => (int)$m['id'],
-            'tipo' => (string)$m['tipo'],
-            'monto' => (float)$m['monto'],
-            'concepto' => (string)$m['concepto'],
-            'categoria' => (string)$m['categoria'],
-            'fecha' => (string)$m['fecha']
-        ];
-    }
-}
-
 echo json_encode([
     'ok' => true,
     'finanzas' => [
@@ -432,14 +354,5 @@ echo json_encode([
         'metas' => (object)$data['metas'],
         'metas_lista' => $metas_lista,
         'historial' => array_values($data['historial'])
-    ],
-    'creditos_nu' => [
-        'saldo_pendiente' => (float)$nu_global['saldo'],
-        'fecha_corte' => (string)($config['fecha_corte'] ?? ''),
-        'cuota_mes' => (float)($config['cuota_mes'] ?? 0),
-        'lineas_credito' => $nu_lineas,
-        'cuotas_dinamicas' => array_values($config['cuotas_dinamicas'] ?? []),
-        'facturacion_items' => array_values($config['facturacion_items'] ?? []),
-        'movimientos' => $nu_movs
     ]
 ], JSON_UNESCAPED_UNICODE);

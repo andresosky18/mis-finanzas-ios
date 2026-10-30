@@ -38,14 +38,6 @@ struct MainTabView: View {
             .tabItem {
                 Label("Metas", systemImage: "target")
             }
-
-            NavigationStack {
-                CreditosNuView()
-                    .toolbar { toolbarButtons }
-            }
-            .tabItem {
-                Label("Créditos Nu", systemImage: "bolt.circle.fill")
-            }
         }
         .tint(Color(hex: "#6366F1"))
         .task {

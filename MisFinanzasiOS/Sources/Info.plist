@@ -23,7 +23,7 @@
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <key>NSFaceIDUsageDescription</key>
-    <string>Usa Face ID para desbloquear tu billetera de Mis Finanzas y Créditos Nu.</string>
+    <string>Usa Face ID para desbloquear tu billetera personal de Mis Finanzas.</string>
     <key>NSAppTransportSecurity</key>
     <dict>
         <key>NSAllowsArbitraryLoads</key>

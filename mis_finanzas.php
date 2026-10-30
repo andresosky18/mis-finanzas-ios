@@ -6,16 +6,16 @@ $archivo_config = 'config.json';
 $config_global = file_exists($archivo_config) ? json_decode(file_get_contents($archivo_config), true) : [];
 $pin_sistema = $config_global['pin_acceso'] ?? '1234';
 
-// AUTENTICACIÓN POR PIN
+// AUTENTICACIÓN POR PIN (EXCLUSIVO DE MIS FINANZAS)
 $error_pin = '';
 if (isset($_GET['logout'])) {
-    unset($_SESSION['auth_pin_ok']);
+    unset($_SESSION['auth_finanzas_ok']);
     header("Location: mis_finanzas.php");
     exit();
 }
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['login_pin'])) {
     if (trim($_POST['pin']) === (string)$pin_sistema) {
-        $_SESSION['auth_pin_ok'] = true;
+        $_SESSION['auth_finanzas_ok'] = true;
         header("Location: mis_finanzas.php");
         exit();
     } else {
@@ -23,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['login_pin'])) {
     }
 }
 
-if (empty($_SESSION['auth_pin_ok'])):
+if (empty($_SESSION['auth_finanzas_ok'])):
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -60,7 +60,6 @@ if (empty($_SESSION['auth_pin_ok'])):
             <input type="password" name="pin" class="pin-input" placeholder="••••" inputmode="numeric" autofocus required>
             <button type="submit" class="btn-enter">Entrar a Mis Finanzas</button>
         </form>
-        <a href="index.php" class="back-link">← Ir al Panel de Créditos</a>
     </div>
     <script>lucide.createIcons();</script>
 </body>
@@ -542,8 +541,6 @@ $mostrar_alerta_transito = (date('Y-m') >= '2026-11');
                 <a class="active" onclick="window.scrollTo(0,0)">Dashboard</a>
                 <a onclick="document.getElementById('seccion-deudas').scrollIntoView({behavior: 'smooth'})">Deudas</a>
                 <a onclick="document.getElementById('seccion-metas').scrollIntoView({behavior: 'smooth'})">Metas</a>
-                <a href="index.php">Créditos Nu</a>
-                <a href="admin.php">Admin</a>
             </div>
             <div class="nav-actions">
                 <button class="nav-btn" onclick="toggleDarkMode()" title="Modo Oscuro"><i data-lucide="moon" size="20"></i></button>

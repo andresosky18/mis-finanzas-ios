@@ -537,8 +537,7 @@ $historial = $conn->query("SELECT * FROM movimientos ORDER BY fecha DESC");
                 Admin Workspace
             </a>
             <div class="nav-links">
-                <a href="index.php" class="nav-link"><i data-lucide="arrow-left" class="icon-sm"></i> Dashboard Crédito</a>
-                <a href="mis_finanzas.php" class="nav-link"><i data-lucide="wallet" class="icon-sm"></i> Mis Finanzas</a>
+                <a href="index.php" class="nav-link"><i data-lucide="arrow-left" class="icon-sm"></i> Volver al Dashboard</a>
             </div>
         </div>
         <div class="nav-right">
