@@ -48,60 +48,30 @@ struct LockScreenView: View {
             VStack(spacing: 26) {
                 Spacer(minLength: 20)
 
-                // Emblema Liquid Glass con refracción especular
-                ZStack {
-                    Circle()
-                        .fill(
-                            RadialGradient(
-                                colors: [Color(hex: "#6366F1").opacity(0.55), Color.clear],
-                                center: .center,
-                                startRadius: 5,
-                                endRadius: 54
-                            )
-                        )
-                        .frame(width: 108, height: 108)
-
+                // Emblema Oficial AW (favicon.ico + aw.png) con refracción Liquid Glass
+                VStack(spacing: 8) {
                     ZStack {
-                        RoundedRectangle(cornerRadius: 26, style: .continuous)
-                            .fill(.ultraThinMaterial)
-                            .frame(width: 78, height: 78)
-
-                        RoundedRectangle(cornerRadius: 26, style: .continuous)
+                        Circle()
                             .fill(
-                                LinearGradient(
+                                RadialGradient(
                                     colors: [
-                                        Color(hex: "#6366F1").opacity(0.65),
-                                        Color(hex: "#4F46E5").opacity(0.25)
+                                        Color(hex: "#CD1713").opacity(0.50),
+                                        Color(hex: "#6366F1").opacity(0.25),
+                                        Color.clear
                                     ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
+                                    center: .center,
+                                    startRadius: 6,
+                                    endRadius: 58
                                 )
                             )
-                            .frame(width: 78, height: 78)
+                            .frame(width: 112, height: 112)
 
-                        RoundedRectangle(cornerRadius: 26, style: .continuous)
-                            .strokeBorder(
-                                LinearGradient(
-                                    colors: [Color.white.opacity(0.75), Color.white.opacity(0.12)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 1.4
-                            )
-                            .frame(width: 78, height: 78)
-
-                        Image(systemName: "wallet.pass.fill")
-                            .font(.system(size: 34, weight: .bold))
-                            .foregroundStyle(
-                                LinearGradient(
-                                    colors: [.white, Color.white.opacity(0.85)],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            )
-                            .shadow(color: Color.black.opacity(0.25), radius: 6, y: 3)
+                        AWLogoView(size: 82, cornerRadius: 24)
+                            .shadow(color: Color(hex: "#CD1713").opacity(0.45), radius: 18, y: 8)
                     }
-                    .shadow(color: Color(hex: "#6366F1").opacity(0.45), radius: 20, y: 10)
+
+                    AWDesignBannerView(height: 18)
+                        .opacity(0.85)
                 }
 
                 // Saludo y estado

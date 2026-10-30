@@ -62,22 +62,9 @@ struct MainTabView: View {
     @ToolbarContentBuilder
     private var toolbarButtons: some ToolbarContent {
         ToolbarItem(placement: .topBarLeading) {
-            HStack(spacing: 7) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [Color(hex: "#6366F1"), Color(hex: "#4F46E5")],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 26, height: 26)
-                    Image(systemName: "wallet.pass.fill")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.white)
-                }
-                Text("Finance.")
+            HStack(spacing: 8) {
+                AWLogoView(size: 28, cornerRadius: 8)
+                Text("Mis Finanzas")
                     .font(.system(size: 16, weight: .heavy, design: .rounded))
             }
         }

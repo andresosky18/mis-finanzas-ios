@@ -54,6 +54,7 @@ jobs:
             Payload/MisFinanzas.app/MisFinanzas
 
           chmod +x Payload/MisFinanzas.app/MisFinanzas
+          cp Sources/Resources/*.png Payload/MisFinanzas.app/
           cp Sources/Info.plist Payload/MisFinanzas.app/Info.plist
           plutil -convert binary1 Payload/MisFinanzas.app/Info.plist
           echo -n "APPL????" > Payload/MisFinanzas.app/PkgInfo
