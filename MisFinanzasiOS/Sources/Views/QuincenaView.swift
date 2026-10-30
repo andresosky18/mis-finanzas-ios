@@ -4,7 +4,7 @@ import UIKit
 struct QuincenaView: View {
     @EnvironmentObject var vm: FinanzasViewModel
     @State private var showAddGasto = false
-    @State private var gastoEditar: GastoItem?
+    @State private var gastoEditar: GastoQuincenalItem?
     @State private var nombreGasto = ""
     @State private var valorGasto = ""
     @State private var labelGasto = ""
