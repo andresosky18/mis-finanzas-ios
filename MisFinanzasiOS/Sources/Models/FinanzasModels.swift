@@ -16,7 +16,7 @@ struct ApiResponse: Codable {
     }
 }
 
-// MARK: - Modelo de Billetera Personal (mis_finanzas.php)
+// MARK: - Modelo de Billetera Personal (mis_finanzas.php en pagos.xo.je)
 struct FinanzasData: Codable {
     var sueldoBase: Double
     var auxTransporte: Double
@@ -56,7 +56,7 @@ struct FinanzasData: Codable {
         case historial
     }
 
-    // MARK: - Recálculo Instantáneo en el iPhone (Idéntico a mis_finanzas.php)
+    // MARK: - Recálculo Exacto (Idéntico a pagos.xo.je/mis_finanzas.php)
     mutating func recalculateAll() {
         let sueldoQuincenal = sueldoBase / 2.0
         let otrosIngresosMensual: Double = 1_000_000
@@ -68,7 +68,6 @@ struct FinanzasData: Codable {
         netoQ2 = ingresoBrutoQ2 - totalDeducciones
         netoQ1 = ingresoBrutoQ1 - totalDeducciones
 
-        // Actualizar vinculación inteligente de gastos con deudas y estado pagado
         for idx in gastosLista.indices {
             let nombreG = gastosLista[idx].nombre
             gastosLista[idx].pagado = gastosMarcados.contains(nombreG)
@@ -88,10 +87,13 @@ struct FinanzasData: Codable {
     }
 
     static func resolverDeuda(nombreGasto: String, deudaExplicita: String?, deudas: [DeudaItem]) -> String? {
-        if let exp = deudaExplicita, !exp.isEmpty, deudas.contains(where: { $0.nombre.caseInsensitiveCompare(exp) == .orderedSame }) {
-            return deudas.first(where: { $0.nombre.caseInsensitiveCompare(exp) == .orderedSame })?.nombre
+        if let exp = deudaExplicita, !exp.isEmpty,
+           let match = deudas.first(where: { $0.nombre.caseInsensitiveCompare(exp) == .orderedSame }) {
+            return match.nombre
         }
-        if nombreGasto.localizedCaseInsensitiveContains("internet") {
+        // Evitar que "Internet y Celular (Hogar/Plan)" o "Parqueadero U" descuenten deudas equivocadas
+        if nombreGasto.localizedCaseInsensitiveContains("internet") ||
+           nombreGasto.localizedCaseInsensitiveContains("parqueadero") {
             return nil
         }
         let cleanGasto = nombreGasto.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -106,7 +108,6 @@ struct FinanzasData: Codable {
         return nil
     }
 
-    // MARK: - Métricas de Distribución para el Gráfico Donut Liquid Glass
     var totalAhorroQuincenal: Double {
         gastosLista
             .filter { $0.nombre.localizedCaseInsensitiveContains("ahorro") }
@@ -126,20 +127,20 @@ struct FinanzasData: Codable {
         max(0, totalGastosQuincena - totalAhorroQuincenal - totalDeudasQuincenal)
     }
 
-    // MARK: - Datos Reales de Andrés Pre-cargados (Cero configuración inicial)
+    // MARK: - Snapshot Real en Vivo de https://pagos.xo.je/mis_finanzas.php
     static func defaultAndresData() -> FinanzasData {
         var initial = FinanzasData(
             sueldoBase: 2_500_000,
             auxTransporte: 124_548,
             bonoQ1: 160_000,
-            ahorroCorvanca: 900_000,
+            ahorroCorvanca: 1_575_000,
             totalIngresosMensual: 3_909_096,
-            totalDeudaPendiente: 17_791_330,
-            netoQ1: 1_324_548,
-            netoQ2: 1_164_548,
-            flujoQ1: 170_519,
-            flujoQ2: 10_519,
-            totalGastosQuincena: 1_154_029,
+            totalDeudaPendiente: 8_627_734,
+            netoQ1: 1_318_215,
+            netoQ2: 1_158_215,
+            flujoQ1: 75_286,
+            flujoQ2: -84_714,
+            totalGastosQuincena: 1_242_929,
             deduccionesNomina: [
                 "Fondo de salud": 50_000,
                 "Fondo de pensión": 50_000,
@@ -147,30 +148,57 @@ struct FinanzasData: Codable {
                 "Ahorro Corvanca": 75_000
             ],
             gastosLista: [
-                GastoQuincenalItem(nombre: "Arriendo", valor: 157_500, label: "Día 3", deudaDetectada: nil, pagado: false),
-                GastoQuincenalItem(nombre: "Moto", valor: 226_500, label: "Día 5", deudaDetectada: "Moto", pagado: false),
-                GastoQuincenalItem(nombre: "Ahorros", valor: 150_000, label: "Día 10", deudaDetectada: nil, pagado: false),
-                GastoQuincenalItem(nombre: "Fondo Deudas", valor: 156_590, label: "Día 10", deudaDetectada: nil, pagado: false),
-                GastoQuincenalItem(nombre: "SOAT/Tecno", valor: 82_375, label: "Día 10", deudaDetectada: nil, pagado: false),
-                GastoQuincenalItem(nombre: "Internet y Celular", valor: 59_950, label: "Días 10 y 13", deudaDetectada: nil, pagado: false),
-                GastoQuincenalItem(nombre: "Net/Spo/iCloud", valor: 32_500, label: "Días 10 y 25", deudaDetectada: nil, pagado: false),
-                GastoQuincenalItem(nombre: "Comida", valor: 100_000, label: "Día 11", deudaDetectada: nil, pagado: false),
-                GastoQuincenalItem(nombre: "Cuota Celular", valor: 133_000, label: "Día 11", deudaDetectada: "Celular", pagado: false),
-                GastoQuincenalItem(nombre: "Universidad", valor: 56_114, label: "Día 25", deudaDetectada: "Universidad", pagado: false),
-                GastoQuincenalItem(nombre: "Gasolina", valor: 56_000, label: "Variable", deudaDetectada: nil, pagado: false)
+                GastoQuincenalItem(nombre: "Comida", valor: 100_000, label: "Día 11", deudaDetectada: nil, pagado: true),
+                GastoQuincenalItem(nombre: "Arriendo", valor: 157_500, label: "Día 3", deudaDetectada: nil, pagado: true),
+                GastoQuincenalItem(nombre: "Moto", valor: 226_500, label: "Día 5", deudaDetectada: "Moto", pagado: true),
+                GastoQuincenalItem(nombre: "Gasolina", valor: 56_000, label: "Variable", deudaDetectada: nil, pagado: true),
+                GastoQuincenalItem(nombre: "Internet y Celular (Hogar/Plan)", valor: 59_950, label: "Días 10 y 13", deudaDetectada: nil, pagado: true),
+                GastoQuincenalItem(nombre: "Cuota Celular", valor: 133_000, label: "Día 11", deudaDetectada: "celular", pagado: true),
+                GastoQuincenalItem(nombre: "Net/Spo/iCloud", valor: 32_500, label: "Días 10 y 25", deudaDetectada: nil, pagado: true),
+                GastoQuincenalItem(nombre: "Ahorros", valor: 150_000, label: "Día 10", deudaDetectada: nil, pagado: true),
+                GastoQuincenalItem(nombre: "Fondo Deudas", valor: 156_590, label: "Día 10", deudaDetectada: nil, pagado: true),
+                GastoQuincenalItem(nombre: "SOAT/Tecno", valor: 82_375, label: "Día 10", deudaDetectada: nil, pagado: true),
+                GastoQuincenalItem(nombre: "Universidad", valor: 56_114, label: "Día 25", deudaDetectada: "Universidad", pagado: true),
+                GastoQuincenalItem(nombre: "Parqueadero U", valor: 32_400, label: "Día 10", deudaDetectada: nil, pagado: true)
             ],
-            gastosMarcados: [],
+            gastosMarcados: [
+                "Comida",
+                "Arriendo",
+                "Moto",
+                "Gasolina",
+                "Internet y Celular (Hogar/Plan)",
+                "Cuota Celular",
+                "Net/Spo/iCloud",
+                "Ahorros",
+                "Fondo Deudas",
+                "SOAT/Tecno",
+                "Universidad",
+                "Parqueadero U"
+            ],
             deudasLista: [
-                DeudaItem(nombre: "Tránsito", total: 7_000_000, pendiente: 4_000_000, cuota: 1_000_000, icono: "car"),
-                DeudaItem(nombre: "Celular", total: 5_000_000, pendiente: 4_223_405, cuota: 133_000, icono: "smartphone"),
-                DeudaItem(nombre: "Moto", total: 11_500_000, pendiente: 8_512_043, cuota: 453_000, icono: "bike"),
-                DeudaItem(nombre: "Universidad", total: 1_280_338, pendiente: 1_055_882, cuota: 112_228, icono: "graduation-cap")
+                DeudaItem(nombre: "Moto", total: 11_500_000, pendiente: 2_446_961, cuota: 453_000, icono: "bike"),
+                DeudaItem(nombre: "Universidad", total: 1_280_338, pendiente: 619_138, cuota: 112_228, icono: "graduation-cap"),
+                DeudaItem(nombre: "celular", total: 4_223_405, pendiente: 3_761_635, cuota: 133_000, icono: "phone"),
+                DeudaItem(nombre: "TV", total: 1_800_000, pendiente: 1_800_000, cuota: 225_000, icono: "tv")
             ],
-            metasLista: [
-                MetaItem(nombre: "Viaje a San Andrés", total: 1_500_000, actual: 0, icono: "plane"),
-                MetaItem(nombre: "Casco Nuevo Moto", total: 400_000, actual: 0, icono: "shield")
-            ],
-            historial: []
+            metasLista: [],
+            historial: [
+                HistorialItem(fecha: "28 Oct 2026 - 11:42", concepto: "Abono a: Moto", monto: 226_000, tipo: "pago", deudaKey: "Moto", gastoOrigen: nil),
+                HistorialItem(fecha: "26 Oct 2026 - 17:35", concepto: "Abono a: celular", monto: 133_000, tipo: "pago", deudaKey: "celular", gastoOrigen: nil),
+                HistorialItem(fecha: "24 Oct 2026 - 01:57", concepto: "Aporte Corvanca", monto: 75_000, tipo: "ahorro", deudaKey: nil, gastoOrigen: nil),
+                HistorialItem(fecha: "22 Oct 2026 - 19:52", concepto: "Abono a: Tránsito", monto: 2_000_000, tipo: "pago", deudaKey: "Tránsito", gastoOrigen: nil),
+                HistorialItem(fecha: "13 Oct 2026 - 16:18", concepto: "Aporte Corvanca", monto: 75_000, tipo: "ahorro", deudaKey: nil, gastoOrigen: nil),
+                HistorialItem(fecha: "13 Oct 2026 - 16:18", concepto: "Aporte Corvanca", monto: 75_000, tipo: "ahorro", deudaKey: nil, gastoOrigen: nil),
+                HistorialItem(fecha: "12 Oct 2026 - 17:42", concepto: "Abono a: Moto", monto: 226_000, tipo: "pago", deudaKey: "Moto", gastoOrigen: nil),
+                HistorialItem(fecha: "08 Oct 2026 - 13:26", concepto: "Abono a: Moto", monto: 272_366, tipo: "pago", deudaKey: "Moto", gastoOrigen: nil),
+                HistorialItem(fecha: "03 Oct 2026 - 20:22", concepto: "Abono a: Universidad", monto: 100_000, tipo: "pago", deudaKey: "Universidad", gastoOrigen: nil),
+                HistorialItem(fecha: "28 Sep 2026 - 23:51", concepto: "Abono a: celular", monto: 195_770, tipo: "pago", deudaKey: "celular", gastoOrigen: nil),
+                HistorialItem(fecha: "28 Sep 2026 - 23:45", concepto: "Aporte Corvanca", monto: 75_000, tipo: "ahorro", deudaKey: nil, gastoOrigen: nil),
+                HistorialItem(fecha: "17 Sep 2026 - 23:10", concepto: "Abono a: YO TARGETA NU", monto: 279_000, tipo: "pago", deudaKey: nil, gastoOrigen: nil),
+                HistorialItem(fecha: "11 Sep 2026 - 00:34", concepto: "Aporte Corvanca", monto: 75_000, tipo: "ahorro", deudaKey: nil, gastoOrigen: nil),
+                HistorialItem(fecha: "11 Sep 2026 - 00:31", concepto: "Abono a: Moto", monto: 455_000, tipo: "pago", deudaKey: "Moto", gastoOrigen: nil),
+                HistorialItem(fecha: "02 Sep 2026 - 22:59", concepto: "Abono a: Universidad", monto: 112_228, tipo: "pago", deudaKey: "Universidad", gastoOrigen: nil)
+            ]
         )
         initial.recalculateAll()
         return initial
@@ -214,6 +242,18 @@ struct DeudaItem: Codable, Identifiable {
     var mesesRestantes: Int {
         guard cuota > 0 && pendiente > 0 else { return 0 }
         return Int(ceil(pendiente / cuota))
+    }
+
+    var etaTexto: String {
+        guard mesesRestantes > 0 else { return "Liquidada 🎉" }
+        let cal = Calendar.current
+        if let future = cal.date(byAdding: .month, value: mesesRestantes, to: Date()) {
+            let fmt = DateFormatter()
+            fmt.locale = Locale(identifier: "es_CO")
+            fmt.dateFormat = "MMM yyyy"
+            return fmt.string(from: future).capitalized
+        }
+        return "~\(mesesRestantes) meses"
     }
 }
 
@@ -269,8 +309,9 @@ enum SFIconMapper {
     static func symbol(for lucideOrEmoji: String) -> String {
         let clean = lucideOrEmoji.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         switch clean {
-        case "smartphone", "📱": return "iphone"
+        case "smartphone", "phone", "📱": return "iphone"
         case "bike", "🏍️": return "bicycle"
+        case "tv", "📺": return "tv.fill"
         case "car", "🛑": return "car.fill"
         case "graduation-cap", "🎓": return "graduationcap.fill"
         case "plane", "✈️": return "airplane"
@@ -284,20 +325,23 @@ enum SFIconMapper {
         case "gamepad-2": return "gamecontroller.fill"
         case "hard-drive": return "externaldrive.fill"
         case "credit-card": return "creditcard.fill"
+        case "home", "house": return "house.fill"
         default: return "creditcard.fill"
         }
     }
 
     static func accentColor(for deudaNombre: String) -> Color {
         let lower = deudaNombre.lowercased()
-        if lower.contains("tránsito") || lower.contains("transito") {
-            return Color(hex: "#F59E0B")
-        } else if lower.contains("celular") {
-            return Color(hex: "#06B6D4")
-        } else if lower.contains("moto") {
+        if lower.contains("moto") {
             return Color(hex: "#6366F1")
         } else if lower.contains("universidad") {
             return Color(hex: "#10B981")
+        } else if lower.contains("celular") {
+            return Color(hex: "#06B6D4")
+        } else if lower.contains("tv") {
+            return Color(hex: "#F59E0B")
+        } else if lower.contains("tránsito") || lower.contains("transito") {
+            return Color(hex: "#EF4444")
         }
         return Color(hex: "#8B5CF6")
     }

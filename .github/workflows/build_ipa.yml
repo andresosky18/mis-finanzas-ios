@@ -16,7 +16,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Compilar Binario Nativo iOS (SwiftUI arm64) y Empaquetar .ipa
+      - name: Compilar Binario Nativo iOS (SwiftUI arm64 + SDK 26 Liquid Glass) y Empaquetar .ipa
         working-directory: MisFinanzasiOS
         run: |
           set -e
@@ -46,6 +46,12 @@ jobs:
               echo "::error::$ERR_MSG"
               exit 1
           fi
+
+          # Estampar LC_BUILD_VERSION SDK 26.0 en el binario Mach-O para activar
+          # el motor nativo real de Liquid Glass de iOS 26/27 en UIKit y SwiftUI
+          xcrun vtool -set-build-version ios 16.0 26.0 -replace \
+            -output Payload/MisFinanzas.app/MisFinanzas \
+            Payload/MisFinanzas.app/MisFinanzas
 
           chmod +x Payload/MisFinanzas.app/MisFinanzas
           cp Sources/Info.plist Payload/MisFinanzas.app/Info.plist
