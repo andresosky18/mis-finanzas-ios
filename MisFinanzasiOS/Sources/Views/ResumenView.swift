@@ -86,8 +86,8 @@ struct ResumenView: View {
                         // 3 Quick Action Squircle Tiles (Idénticos a Send / QR / Receive de Referencia #1)
                         HStack(spacing: 10) {
                             QuickActionTile(
-                                title: "Abonar",
-                                icon: "arrow.up.circle"
+                                title: "Tarjetas",
+                                icon: "applewatch"
                             ) {
                                 selectedTab = 2
                             }
@@ -100,12 +100,10 @@ struct ResumenView: View {
                             }
 
                             QuickActionTile(
-                                title: "+Ahorro",
-                                icon: "arrow.down.circle"
+                                title: "Deudas",
+                                icon: "creditcard.fill"
                             ) {
-                                Task {
-                                    await vm.sendAction(["accion": "abonar_ahorro", "monto": 75000])
-                                }
+                                selectedTab = 3
                             }
                         }
                     }
@@ -114,7 +112,7 @@ struct ResumenView: View {
 
                     // 2. SAVING CUBE "FONDO CORVANCA" (Idéntico a "Cubes -> Emergency Fund" de Referencia #2 Algbra)
                     Button {
-                        selectedTab = 3
+                        selectedTab = 4
                     } label: {
                         VStack(spacing: 12) {
                             HStack {

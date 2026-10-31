@@ -38,6 +38,7 @@ jobs:
             Sources/Views/MainTabView.swift \
             Sources/Views/ResumenView.swift \
             Sources/Views/QuincenaView.swift \
+            Sources/Views/TarjetasView.swift \
             Sources/Views/DeudasView.swift \
             Sources/Views/MetasView.swift \
             -o Payload/MisFinanzas.app/MisFinanzas 2> build_err.log; then

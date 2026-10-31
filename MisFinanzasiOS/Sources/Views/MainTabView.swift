@@ -31,13 +31,22 @@ struct MainTabView: View {
             .tag(1)
 
             NavigationStack {
+                TarjetasView()
+                    .toolbar { toolbarButtons }
+            }
+            .tabItem {
+                Label("Tarjetas", systemImage: "applewatch")
+            }
+            .tag(2)
+
+            NavigationStack {
                 DeudasView()
                     .toolbar { toolbarButtons }
             }
             .tabItem {
                 Label("Deudas", systemImage: "creditcard.fill")
             }
-            .tag(2)
+            .tag(3)
 
             NavigationStack {
                 MetasView()
@@ -46,11 +55,19 @@ struct MainTabView: View {
             .tabItem {
                 Label("Ahorro", systemImage: "chart.bar.fill")
             }
-            .tag(3)
+            .tag(4)
         }
         .tint(Color(hex: "#4F46E5"))
         .onChange(of: selectedTab) { _ in
             vm.triggerHaptic(.light)
+        }
+        .onChange(of: vm.navigateToTab) { newTab in
+            if let tab = newTab {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    selectedTab = tab
+                }
+                vm.navigateToTab = nil
+            }
         }
         .sheet(isPresented: $showServerSettings) {
             ServerSettingsSheet()

@@ -218,7 +218,8 @@ enum LiveHTMLFinanzasParser {
                         HistorialItem(fecha: fecha, concepto: concepto, monto: monto, tipo: tipo, deudaKey: nil, gastoOrigen: nil)
                     )
                 }
-                data.historial = parsedHist
+                let localTarjetaMoves = fallback.historial.filter { $0.tipo == "tarjeta" }
+                data.historial = localTarjetaMoves + parsedHist
             }
         }
 
@@ -267,6 +268,8 @@ final class FinanzasViewModel: ObservableObject {
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
     @Published var syncStatusText: String = "En vivo • pagos.xo.je"
+    @Published var navigateToTab: Int? = nil
+    @Published var lastApplePayToast: String? = nil
 
     private let cacheKey = "finanzas_personal_cache_v4_xoje"
     private lazy var urlSession: URLSession = {
@@ -678,6 +681,55 @@ final class FinanzasViewModel: ObservableObject {
             guard let nombre = payload["meta_eliminar"] as? String else { break }
             finanzas.metasLista.removeAll { $0.nombre == nombre }
 
+        case "registrar_gasto_tarjeta":
+            let comercio = (payload["comercio"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Compra con Tarjeta"
+            let monto = (payload["monto"] as? Double) ?? 0
+            guard monto > 0 else { break }
+            let tarjeta = (payload["tarjeta"] as? String) ?? "Débito"
+            let metodo = (payload["metodo"] as? String) ?? "Apple Pay"
+            let esCredito = (payload["es_credito"] as? Bool) ?? tarjeta.localizedCaseInsensitiveContains("crédito") || tarjeta.localizedCaseInsensitiveContains("credito") || tarjeta.localizedCaseInsensitiveContains("nu")
+            let catDetectada = CategoriaTarjeta.detectar(
+                desde: comercio,
+                categoriaExplicita: payload["categoria"] as? String
+            )
+
+            let nuevoItem = GastoTarjetaItem(
+                id: UUID().uuidString,
+                fecha: fechaActual,
+                comercio: comercio.isEmpty ? "Compra \(catDetectada.rawValue)" : comercio,
+                monto: monto,
+                categoria: catDetectada.rawValue,
+                tarjeta: tarjeta,
+                metodo: metodo,
+                esCredito: esCredito
+            )
+            finanzas.gastosTarjeta.insert(nuevoItem, at: 0)
+
+            // También lo anotamos en el Historial General de Movimientos
+            finanzas.historial.insert(
+                HistorialItem(
+                    fecha: fechaActual,
+                    concepto: "[\(catDetectada.rawValue)] \(nuevoItem.comercio) • \(tarjeta)",
+                    monto: monto,
+                    tipo: "tarjeta",
+                    deudaKey: nil,
+                    gastoOrigen: metodo
+                ),
+                at: 0
+            )
+
+            // Si el usuario eligió vincular la compra con tarjeta de crédito a una deuda o gasto quincenal
+            if let gastoQuincena = payload["sumar_a_gasto_quincena"] as? String,
+               !gastoQuincena.isEmpty,
+               let idxG = finanzas.gastosLista.firstIndex(where: { $0.nombre.caseInsensitiveCompare(gastoQuincena) == .orderedSame }) {
+                finanzas.gastosLista[idxG].valor += monto
+            }
+
+        case "eliminar_gasto_tarjeta":
+            if let idBorrar = payload["id"] as? String {
+                finanzas.gastosTarjeta.removeAll { $0.id == idBorrar }
+            }
+
         default:
             break
         }
@@ -691,6 +743,71 @@ final class FinanzasViewModel: ObservableObject {
     private func saveLocalFinanzas() {
         if let encoded = try? JSONEncoder().encode(finanzas) {
             UserDefaults.standard.set(encoded, forKey: cacheKey)
+        }
+    }
+
+    // MARK: - Automatización Apple Pay / Apple Watch (Estilo Lukas via Atajos URL Scheme)
+    // Ejemplo de URL que dispara el iPhone o Apple Watch al pagar en datáfono:
+    // misfinanzas://pay?monto=38500&comercio=McDonalds&tarjeta=Debito&metodo=Apple%20Watch
+    func handleIncomingURL(_ url: URL) {
+        guard url.scheme?.lowercased() == "misfinanzas" else { return }
+
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let queryItems = components?.queryItems ?? []
+
+        func param(_ names: [String]) -> String? {
+            for n in names {
+                if let val = queryItems.first(where: { $0.name.caseInsensitiveCompare(n) == .orderedSame })?.value,
+                   !val.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    return val.removingPercentEncoding ?? val
+                }
+            }
+            return nil
+        }
+
+        let rawMonto = param(["monto", "amount", "valor"]) ?? "0"
+        // Limpiar símbolos como "$", ".", "," si Apple Pay pasa "$ 28.500"
+        let cleanDigits = rawMonto
+            .replacingOccurrences(of: "COP", with: "")
+            .replacingOccurrences(of: "$", with: "")
+            .replacingOccurrences(of: ".", with: "")
+            .replacingOccurrences(of: ",", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let monto = Double(cleanDigits) ?? 0
+        guard monto > 0 else { return }
+
+        let comercio = param(["comercio", "merchant", "nombre", "lugar"]) ?? "Compra Apple Pay"
+        let tarjeta = param(["tarjeta", "card", "medio"]) ?? "Débito"
+        let metodo = param(["metodo", "dispositivo", "origen"]) ?? "Apple Watch / Pay"
+        let categoriaParam = param(["categoria", "category"])
+
+        let cat = CategoriaTarjeta.detectar(desde: comercio, categoriaExplicita: categoriaParam)
+        let esCredito = tarjeta.localizedCaseInsensitiveContains("crédito") ||
+                        tarjeta.localizedCaseInsensitiveContains("credito") ||
+                        tarjeta.localizedCaseInsensitiveContains("nu")
+
+        isUnlocked = true
+        navigateToTab = 2 // Abrir pestaña Tarjetas / Movimientos automáticamente
+
+        Task {
+            await sendAction([
+                "accion": "registrar_gasto_tarjeta",
+                "comercio": comercio,
+                "monto": monto,
+                "categoria": cat.rawValue,
+                "tarjeta": tarjeta,
+                "metodo": metodo,
+                "es_credito": esCredito
+            ])
+
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.78)) {
+                lastApplePayToast = "Apple Pay: \(comercio) (\(monto.copFormatted)) en \(cat.rawValue)"
+            }
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            withAnimation {
+                lastApplePayToast = nil
+            }
         }
     }
 

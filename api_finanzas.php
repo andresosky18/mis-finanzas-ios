@@ -262,6 +262,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($req['accion'])) {
     } elseif ($accion === 'editar_sueldo') {
         $data['sueldo_base'] = floatval($req['nuevo_sueldo'] ?? $data['sueldo_base']);
         $data['bono_q1'] = floatval($req['nuevo_bono'] ?? $data['bono_q1']);
+    } elseif ($accion === 'registrar_gasto_tarjeta') {
+        $comercio = trim($req['comercio'] ?? 'Compra con Tarjeta');
+        $monto = floatval($req['monto'] ?? 0);
+        $categoria = trim($req['categoria'] ?? 'Otros');
+        $tarjeta = trim($req['tarjeta'] ?? 'Débito');
+        $metodo = trim($req['metodo'] ?? 'Apple Pay');
+        if ($monto > 0) {
+            if (!isset($data['gastos_tarjeta']) || !is_array($data['gastos_tarjeta'])) {
+                $data['gastos_tarjeta'] = [];
+            }
+            array_unshift($data['gastos_tarjeta'], [
+                'id' => uniqid('card_'),
+                'fecha' => $fecha_actual,
+                'comercio' => $comercio,
+                'monto' => $monto,
+                'categoria' => $categoria,
+                'tarjeta' => $tarjeta,
+                'metodo' => $metodo,
+                'esCredito' => (stripos($tarjeta, 'crédito') !== false || stripos($tarjeta, 'credito') !== false || stripos($tarjeta, 'nu') !== false)
+            ]);
+            array_unshift($data['historial'], [
+                'fecha' => $fecha_actual,
+                'concepto' => "[$categoria] $comercio • $tarjeta",
+                'monto' => $monto,
+                'tipo' => 'tarjeta'
+            ]);
+        }
+    } elseif ($accion === 'eliminar_gasto_tarjeta') {
+        $id_del = $req['id'] ?? '';
+        if (!empty($id_del) && !empty($data['gastos_tarjeta'])) {
+            $data['gastos_tarjeta'] = array_values(array_filter($data['gastos_tarjeta'], function($item) use ($id_del) {
+                return ($item['id'] ?? '') !== $id_del;
+            }));
+        }
     }
 
     $data['historial'] = array_slice($data['historial'], 0, 30);

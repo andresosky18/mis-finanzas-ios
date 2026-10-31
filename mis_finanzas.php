@@ -343,6 +343,42 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['accion'])) {
         $meta_eliminar = $_POST['meta_eliminar'];
         unset($data['metas'][$meta_eliminar]);
     }
+    elseif ($accion == 'registrar_gasto_tarjeta') {
+        $comercio = trim($_POST['comercio'] ?? 'Compra con Tarjeta');
+        $monto = floatval($_POST['monto'] ?? 0);
+        $categoria = trim($_POST['categoria'] ?? 'Otros');
+        $tarjeta = trim($_POST['tarjeta'] ?? 'Débito');
+        $metodo = trim($_POST['metodo'] ?? 'Apple Pay');
+        if ($monto > 0) {
+            if (!isset($data['gastos_tarjeta']) || !is_array($data['gastos_tarjeta'])) {
+                $data['gastos_tarjeta'] = [];
+            }
+            array_unshift($data['gastos_tarjeta'], [
+                'id' => uniqid('card_'),
+                'fecha' => $fecha_actual,
+                'comercio' => $comercio,
+                'monto' => $monto,
+                'categoria' => $categoria,
+                'tarjeta' => $tarjeta,
+                'metodo' => $metodo,
+                'esCredito' => (stripos($tarjeta, 'crédito') !== false || stripos($tarjeta, 'credito') !== false || stripos($tarjeta, 'nu') !== false)
+            ]);
+            array_unshift($data['historial'], [
+                'fecha' => $fecha_actual,
+                'concepto' => "[$categoria] $comercio • $tarjeta",
+                'monto' => $monto,
+                'tipo' => 'tarjeta'
+            ]);
+        }
+    }
+    elseif ($accion == 'eliminar_gasto_tarjeta') {
+        $id_del = $_POST['id'] ?? '';
+        if (!empty($id_del) && !empty($data['gastos_tarjeta'])) {
+            $data['gastos_tarjeta'] = array_values(array_filter($data['gastos_tarjeta'], function($item) use ($id_del) {
+                return ($item['id'] ?? '') !== $id_del;
+            }));
+        }
+    }
 
     $data['historial'] = array_slice($data['historial'], 0, 30);
     $json_update = json_encode($data, JSON_UNESCAPED_UNICODE);

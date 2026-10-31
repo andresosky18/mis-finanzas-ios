@@ -19,6 +19,9 @@ struct MisFinanzasApp: App {
                 }
             }
             .preferredColorScheme(isDarkMode ? .dark : .light)
+            .onOpenURL { incomingURL in
+                vm.handleIncomingURL(incomingURL)
+            }
         }
     }
 }
