@@ -230,7 +230,7 @@ struct FinanzasData: Codable {
         deudasLista = try c.decodeIfPresent([DeudaItem].self, forKey: .deudasLista) ?? []
         metasLista = try c.decodeIfPresent([MetaItem].self, forKey: .metasLista) ?? []
         historial = try c.decodeIfPresent([HistorialItem].self, forKey: .historial) ?? []
-        gastosTarjeta = try c.decodeIfPresent([GastoTarjetaItem].self, forKey: .gastosTarjeta) ?? FinanzasData.defaultGastosTarjeta()
+        gastosTarjeta = try c.decodeIfPresent([GastoTarjetaItem].self, forKey: .gastosTarjeta) ?? []
     }
 
     // MARK: - Recálculo Exacto (Idéntico a pagos.xo.je/mis_finanzas.php)
@@ -317,48 +317,7 @@ struct FinanzasData: Codable {
     }
 
     static func defaultGastosTarjeta() -> [GastoTarjetaItem] {
-        [
-            GastoTarjetaItem(
-                id: "card-1",
-                fecha: "Hoy · Apple Watch",
-                comercio: "Estación Terpel (Gasolina)",
-                monto: 28_000,
-                categoria: CategoriaTarjeta.transporte.rawValue,
-                tarjeta: "Débito",
-                metodo: "Apple Watch",
-                esCredito: false
-            ),
-            GastoTarjetaItem(
-                id: "card-2",
-                fecha: "Ayer · Apple Pay",
-                comercio: "Tiendas D1 Mercado",
-                monto: 64_500,
-                categoria: CategoriaTarjeta.mercado.rawValue,
-                tarjeta: "Débito",
-                metodo: "Apple Pay",
-                esCredito: false
-            ),
-            GastoTarjetaItem(
-                id: "card-3",
-                fecha: "28 Oct · Apple Pay",
-                comercio: "Netflix / Spotify / iCloud",
-                monto: 32_500,
-                categoria: CategoriaTarjeta.suscripciones.rawValue,
-                tarjeta: "Crédito Nu",
-                metodo: "Apple Pay",
-                esCredito: true
-            ),
-            GastoTarjetaItem(
-                id: "card-4",
-                fecha: "27 Oct · Apple Watch",
-                comercio: "El Corral / Almuerzo",
-                monto: 38_900,
-                categoria: CategoriaTarjeta.comida.rawValue,
-                tarjeta: "Débito",
-                metodo: "Apple Watch",
-                esCredito: false
-            )
-        ]
+        []
     }
 
     // MARK: - Snapshot Real en Vivo de https://pagos.xo.je/mis_finanzas.php

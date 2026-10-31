@@ -298,10 +298,52 @@ final class FinanzasViewModel: ObservableObject {
             apiURL = Self.defaultLiveURL
         }
 
+        // Escuchar pagos registrados en segundo plano por AppIntents (Apple Watch / Apple Pay / SMS Bancario)
+        NotificationCenter.default.addObserver(
+            forName: RegistroPagosWalletEngine.notificationName,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            guard let self = self else { return }
+            Task { @MainActor in
+                self.reloadFromLocalCache()
+                if let mov = note.object as? GastoTarjetaItem {
+                    self.lastApplePayToast = "✅ \(mov.comercio): \(mov.monto.copFormatted) → \(mov.categoria) (\(mov.tarjeta))"
+                    // Sincronizar también con pagos.xo.je en segundo plano
+                    await self.syncCardExpenseToRemote(mov)
+                }
+            }
+        }
+
         // Sincronizar automáticamente en segundo plano al iniciar
         Task {
             await fetchAllData()
         }
+    }
+
+    func reloadFromLocalCache() {
+        if let data = UserDefaults.standard.data(forKey: cacheKey),
+           var cached = try? JSONDecoder().decode(FinanzasData.self, from: data) {
+            cached.recalculateAll()
+            withAnimation(.spring(response: 0.36, dampingFraction: 0.8)) {
+                self.finanzas = cached
+            }
+        }
+    }
+
+    func syncCardExpenseToRemote(_ mov: GastoTarjetaItem) async {
+        guard let targetURL = normalizedLiveURL() else { return }
+        _ = try? await performLiveRequest(
+            url: targetURL,
+            formParams: [
+                "accion": "registrar_gasto_tarjeta",
+                "comercio": mov.comercio,
+                "monto": String(Int(mov.monto)),
+                "categoria": mov.categoria,
+                "tarjeta": mov.tarjeta,
+                "metodo": mov.metodo
+            ]
+        )
     }
 
     // MARK: - Desbloqueo con Face ID Nativo o PIN
@@ -347,6 +389,7 @@ final class FinanzasViewModel: ObservableObject {
 
     // MARK: - Sincronización en Vivo con https://pagos.xo.je/mis_finanzas.php
     func fetchAllData() async {
+        reloadFromLocalCache()
         guard let targetURL = normalizedLiveURL() else { return }
 
         isLoading = true
@@ -765,20 +808,35 @@ final class FinanzasViewModel: ObservableObject {
             return nil
         }
 
-        let rawMonto = param(["monto", "amount", "valor"]) ?? "0"
-        // Limpiar símbolos como "$", ".", "," si Apple Pay pasa "$ 28.500"
-        let cleanDigits = rawMonto
-            .replacingOccurrences(of: "COP", with: "")
-            .replacingOccurrences(of: "$", with: "")
-            .replacingOccurrences(of: ".", with: "")
-            .replacingOccurrences(of: ",", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        // Si el Atajo envía un SMS o notificación completa (ej: misfinanzas://pay?texto=Bancolombia%20compraste%20$25.000%20en%20D1)
+        if let rawTexto = param(["texto", "sms", "mensaje", "notificacion"]),
+           let extraido = RegistroPagosWalletEngine.extraerDatosDeTextoBancario(rawTexto) {
+            isUnlocked = true
+            navigateToTab = 2
+            let cat = CategoriaTarjeta.detectar(desde: extraido.comercio)
+            Task {
+                await sendAction([
+                    "accion": "registrar_gasto_tarjeta",
+                    "comercio": extraido.comercio,
+                    "monto": extraido.monto,
+                    "categoria": cat.rawValue,
+                    "tarjeta": extraido.tarjeta,
+                    "metodo": "SMS / Notificación Bancaria",
+                    "es_credito": extraido.tarjeta.localizedCaseInsensitiveContains("crédito") || extraido.tarjeta.localizedCaseInsensitiveContains("credito")
+                ])
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.78)) {
+                    lastApplePayToast = "✅ \(extraido.comercio) (\(extraido.monto.copFormatted)) → \(cat.rawValue) [\(extraido.tarjeta)]"
+                }
+            }
+            return
+        }
 
-        let monto = Double(cleanDigits) ?? 0
+        let rawMonto = param(["monto", "amount", "valor"]) ?? "0"
+        let monto = RegistroPagosWalletEngine.limpiarNumeroCOP(rawMonto)
         guard monto > 0 else { return }
 
         let comercio = param(["comercio", "merchant", "nombre", "lugar"]) ?? "Compra Apple Pay"
-        let tarjeta = param(["tarjeta", "card", "medio"]) ?? "Débito"
+        let tarjeta = param(["tarjeta", "card", "medio", "pase"]) ?? "Tarjeta Wallet"
         let metodo = param(["metodo", "dispositivo", "origen"]) ?? "Apple Watch / Pay"
         let categoriaParam = param(["categoria", "category"])
 

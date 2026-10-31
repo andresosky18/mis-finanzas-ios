@@ -9,32 +9,67 @@ struct TarjetasView: View {
 
     // Sheets
     @State private var showAddCompraSheet = false
+    @State private var showPasteBankTextSheet = false
     @State private var showShortcutGuideSheet = false
-    @State private var copiedToast = false
 
-    // Formulario nueva compra con tarjeta / Apple Watch
+    // Formulario nueva compra con cualquiera de tus tarjetas / Apple Watch / Celular
     @State private var comercioInput = ""
     @State private var montoInput = ""
     @State private var categoriaSeleccionada: CategoriaTarjeta = .comida
-    @State private var tarjetaSeleccionada = "Débito"
+    @State private var tarjetaSeleccionada = "Débito Bancolombia"
+    @State private var tarjetaPersonalizada = ""
     @State private var metodoSeleccionado = "Apple Watch"
 
-    private let filtrosTarjeta = ["Todas", "Débito", "Crédito Nu", "Apple Watch"]
-    private let tarjetasDisponibles = ["Débito", "Crédito Nu", "Nequi / Débito", "Efectivo"]
-    private let metodosDisponibles = ["Apple Watch", "Apple Pay (iPhone)", "Tarjeta Física", "PSE / QR"]
+    // Pegar SMS / Notificación bancaria de cualquier banco
+    @State private var bankMessageInput = ""
+
+    // Todas las tarjetas colombianas (Débito y Crédito) + opción de escribir cualquier otra
+    private let tarjetasDisponibles = [
+        "Débito Bancolombia",
+        "Crédito Bancolombia",
+        "Débito Nu",
+        "Crédito Nu",
+        "Tarjeta Nequi",
+        "Débito Davivienda",
+        "Crédito Davivienda",
+        "Débito Lulo Bank",
+        "RappiCard",
+        "Tarjeta BBVA",
+        "Banco de Bogotá",
+        "Otra Tarjeta..."
+    ]
+
+    private let metodosDisponibles = [
+        "Apple Watch",
+        "Apple Pay (Celular)",
+        "Tarjeta Física (Datáfono)",
+        "PSE / Compra Online"
+    ]
+
+    // Filtros dinámicos basados en las tarjetas reales que has usado + Débito / Crédito / Watch
+    private var filtrosTarjetaDinamicos: [String] {
+        var base = ["Todas", "Todas Débito", "Todas Crédito", "Apple Watch"]
+        let tarjetasUsadas = Set(vm.finanzas.gastosTarjeta.map { $0.tarjeta })
+        for t in tarjetasUsadas.sorted() where !base.contains(t) {
+            base.append(t)
+        }
+        return base
+    }
 
     private var filteredMovimientos: [GastoTarjetaItem] {
         vm.finanzas.gastosTarjeta.filter { item in
             let passCard: Bool
             switch selectedCardFilter {
-            case "Débito":
+            case "Todas":
+                passCard = true
+            case "Todas Débito":
                 passCard = !item.esCredito
-            case "Crédito Nu":
+            case "Todas Crédito":
                 passCard = item.esCredito
             case "Apple Watch":
                 passCard = item.metodo.localizedCaseInsensitiveContains("watch")
             default:
-                passCard = true
+                passCard = item.tarjeta.caseInsensitiveCompare(selectedCardFilter) == .orderedSame
             }
 
             let passCat = (selectedCategoryFilter == "Todas") ||
@@ -43,15 +78,14 @@ struct TarjetasView: View {
         }
     }
 
-    private var resumenPorCategoria: [(categoria: CategoriaTarjeta, total: Double, porcentaje: Double)] {
+    private var resumenPorCategoria: [(categoria: CategoriaTarjeta, total: Double, porcentaje: Double, cantidad: Int)] {
         let totalGeneral = max(1, vm.finanzas.totalGastadoTarjetas)
-        var resultados: [(CategoriaTarjeta, Double, Double)] = []
+        var resultados: [(CategoriaTarjeta, Double, Double, Int)] = []
         for cat in CategoriaTarjeta.allCases {
-            let suma = vm.finanzas.gastosTarjeta
-                .filter { $0.categoriaEnum == cat }
-                .reduce(0) { $0 + $1.monto }
+            let itemsCat = vm.finanzas.gastosTarjeta.filter { $0.categoriaEnum == cat }
+            let suma = itemsCat.reduce(0) { $0 + $1.monto }
             if suma > 0 {
-                resultados.append((cat, suma, suma / totalGeneral))
+                resultados.append((cat, suma, suma / totalGeneral, itemsCat.count))
             }
         }
         return resultados.sorted { $0.1 > $1.1 }
@@ -66,10 +100,10 @@ struct TarjetasView: View {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 16) {
 
-                    // Toast automático cuando llega un pago desde Apple Watch / Apple Pay
+                    // Toast en vivo cuando entra un pago real desde tu Apple Watch, iPhone o SMS
                     if let toast = vm.lastApplePayToast {
                         HStack(spacing: 10) {
-                            Image(systemName: "applewatch.radiowaves.left.and.right")
+                            Image(systemName: "checkmark.seal.fill")
                                 .font(.system(size: 18, weight: .bold))
                                 .foregroundColor(.white)
                             Text(toast)
@@ -86,18 +120,17 @@ struct TarjetasView: View {
                             )
                         )
                         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                        .transition(.move(edge: .top).combined(with: .opacity))
                     }
 
-                    // 1. HERO CARD ESTILO LUKAS: GASTOS CON TARJETAS + APPLE PAY / WATCH
+                    // 1. HERO CARD: TODAS TUS TARJETAS DÉBITO Y CRÉDITO (APPLE WATCH + CELULAR)
                     VStack(spacing: 16) {
                         HStack {
                             HStack(spacing: 6) {
-                                Image(systemName: "applewatch")
+                                Image(systemName: "applewatch.radiowaves.left.and.right")
                                     .font(.system(size: 12, weight: .heavy))
-                                Text("APPLE PAY · WATCH · TARJETAS")
+                                Text("TODAS MIS TARJETAS · WATCH & CEL")
                                     .font(.system(size: 10, weight: .heavy, design: .rounded))
-                                    .tracking(0.6)
+                                    .tracking(0.5)
                             }
                             .padding(.horizontal, 10)
                             .padding(.vertical, 5)
@@ -112,35 +145,35 @@ struct TarjetasView: View {
                                 showShortcutGuideSheet = true
                             } label: {
                                 HStack(spacing: 4) {
-                                    Image(systemName: "bolt.horizontal.circle.fill")
-                                    Text("Auto-Watch")
+                                    Image(systemName: "bolt.fill")
+                                    Text("Activar Auto-Registro")
                                 }
                                 .font(.system(size: 11, weight: .heavy, design: .rounded))
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 5)
-                                .background(Color(hex: "#10B981").opacity(0.15))
+                                .background(Color(hex: "#10B981").opacity(0.16))
                                 .foregroundColor(Color(hex: "#10B981"))
                                 .clipShape(Capsule())
                             }
                         }
 
                         VStack(spacing: 4) {
-                            Text("Total Gastado con Tarjetas")
+                            Text("Gasto Acumulado con Tarjetas")
                                 .font(.system(size: 12, weight: .bold, design: .rounded))
                                 .foregroundColor(.secondary)
 
                             Text(f.totalGastadoTarjetas.copFormatted)
-                                .font(.system(size: 34, weight: .black, design: .rounded))
+                                .font(.system(size: 36, weight: .black, design: .rounded))
                         }
 
-                        // Sub-tarjetas Débito vs Crédito Nu
+                        // Resumen Todas tus Tarjetas Débito vs Todas tus Tarjetas Crédito
                         HStack(spacing: 10) {
                             VStack(alignment: .leading, spacing: 4) {
                                 HStack(spacing: 5) {
                                     Image(systemName: "creditcard.fill")
                                         .font(.system(size: 11, weight: .bold))
                                         .foregroundColor(Color(hex: "#10B981"))
-                                    Text("Tarjeta Débito")
+                                    Text("Tarjetas Débito")
                                         .font(.system(size: 11, weight: .bold, design: .rounded))
                                         .foregroundColor(.secondary)
                                 }
@@ -154,10 +187,10 @@ struct TarjetasView: View {
 
                             VStack(alignment: .leading, spacing: 4) {
                                 HStack(spacing: 5) {
-                                    Image(systemName: "sparkles.rectangle.stack.fill")
+                                    Image(systemName: "creditcard.and.123")
                                         .font(.system(size: 11, weight: .bold))
                                         .foregroundColor(Color(hex: "#8B5CF6"))
-                                    Text("Tarjeta Crédito")
+                                    Text("Tarjetas Crédito")
                                         .font(.system(size: 11, weight: .bold, design: .rounded))
                                         .foregroundColor(.secondary)
                                 }
@@ -170,8 +203,8 @@ struct TarjetasView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                         }
 
-                        // Botones de Acción Rápida: Anotar Compra + Configurar Atajo Apple Watch
-                        HStack(spacing: 10) {
+                        // 3 Botones Reales: Registrar Compra | Leer SMS/Notificación | Configurar Atajo Watch/Cel
+                        HStack(spacing: 8) {
                             Button {
                                 vm.triggerHaptic(.light)
                                 comercioInput = ""
@@ -179,8 +212,8 @@ struct TarjetasView: View {
                                 categoriaSeleccionada = .comida
                                 showAddCompraSheet = true
                             } label: {
-                                Label("Anotar Pago", systemImage: "plus.circle.fill")
-                                    .font(.system(size: 13, weight: .heavy, design: .rounded))
+                                Label("Nuevo Pago", systemImage: "plus.circle.fill")
+                                    .font(.system(size: 12, weight: .heavy, design: .rounded))
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 12)
                                     .background(Color.primary)
@@ -191,14 +224,20 @@ struct TarjetasView: View {
 
                             Button {
                                 vm.triggerHaptic(.light)
-                                showShortcutGuideSheet = true
+                                // Si hay texto en el portapapeles, pre-cargarlo
+                                if let clip = UIPasteboard.general.string, !clip.isEmpty {
+                                    bankMessageInput = clip
+                                } else {
+                                    bankMessageInput = ""
+                                }
+                                showPasteBankTextSheet = true
                             } label: {
-                                Label("Conectar Watch / Pay", systemImage: "applewatch.watchface")
-                                    .font(.system(size: 13, weight: .heavy, design: .rounded))
+                                Label("Leer SMS Banco", systemImage: "message.badge.waveform.fill")
+                                    .font(.system(size: 12, weight: .heavy, design: .rounded))
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 12)
-                                    .background(Color.primary.opacity(0.08))
-                                    .foregroundColor(.primary)
+                                    .background(Color(hex: "#4F46E5").opacity(0.14))
+                                    .foregroundColor(Color(hex: "#4F46E5"))
                                     .clipShape(Capsule())
                             }
                             .buttonStyle(LiquidScaleButtonStyle())
@@ -207,14 +246,14 @@ struct TarjetasView: View {
                     .padding(20)
                     .liquidGlass(cornerRadius: 30)
 
-                    // 2. DESGLOSE POR CATEGORÍAS (ESTILO LUKAS CON BARRAS MULTICOLOR Y % DE GASTO)
+                    // 2. DESGLOSE POR CATEGORÍAS (ESTILO LUKAS)
                     VStack(alignment: .leading, spacing: 14) {
                         HStack {
-                            Text("Gastos por Categoría")
+                            Text("Categorías de tus Pagos")
                                 .font(.system(size: 15, weight: .heavy, design: .rounded))
                             Spacer()
                             if selectedCategoryFilter != "Todas" {
-                                Button("Ver todas") {
+                                Button("Mostrar todas") {
                                     withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                                         selectedCategoryFilter = "Todas"
                                     }
@@ -224,81 +263,92 @@ struct TarjetasView: View {
                             }
                         }
 
-                        // Barra horizontal segmentada multicolor estilo Lukas
-                        GeometryReader { geo in
-                            HStack(spacing: 4) {
-                                ForEach(resumenPorCategoria, id: \.categoria.id) { item in
-                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                        .fill(item.categoria.color)
-                                        .frame(width: max(12, (geo.size.width - CGFloat(max(0, resumenPorCategoria.count - 1) * 4)) * item.porcentaje))
+                        if resumenPorCategoria.isEmpty {
+                            HStack(spacing: 12) {
+                                Image(systemName: "chart.pie.fill")
+                                    .font(.system(size: 22))
+                                    .foregroundColor(Color(hex: "#4F46E5"))
+                                Text("Cuando pagues con tu Apple Watch o Celular, aquí verás cuánto gastas en Comida, Gasolina, Mercado, Suscripciones y más.")
+                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.vertical, 6)
+                        } else {
+                            // Barra horizontal segmentada multicolor estilo Lukas
+                            GeometryReader { geo in
+                                HStack(spacing: 4) {
+                                    ForEach(resumenPorCategoria, id: \.categoria.id) { item in
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .fill(item.categoria.color)
+                                            .frame(width: max(12, (geo.size.width - CGFloat(max(0, resumenPorCategoria.count - 1) * 4)) * item.porcentaje))
+                                    }
                                 }
                             }
-                        }
-                        .frame(height: 12)
-                        .clipShape(Capsule())
+                            .frame(height: 12)
+                            .clipShape(Capsule())
 
-                        // Lista de Categorías Interactivas (Toca una para filtrar movimientos)
-                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                            ForEach(resumenPorCategoria, id: \.categoria.id) { item in
-                                let isSelected = selectedCategoryFilter == item.categoria.rawValue
-                                Button {
-                                    vm.triggerHaptic(.light)
-                                    withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
-                                        selectedCategoryFilter = isSelected ? "Todas" : item.categoria.rawValue
-                                    }
-                                } label: {
-                                    HStack(spacing: 10) {
-                                        ZStack {
-                                            Circle()
-                                                .fill(item.categoria.color.opacity(0.16))
-                                                .frame(width: 34, height: 34)
-                                            Image(systemName: item.categoria.sfSymbol)
-                                                .font(.system(size: 14, weight: .bold))
-                                                .foregroundColor(item.categoria.color)
+                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                                ForEach(resumenPorCategoria, id: \.categoria.id) { item in
+                                    let isSelected = selectedCategoryFilter == item.categoria.rawValue
+                                    Button {
+                                        vm.triggerHaptic(.light)
+                                        withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
+                                            selectedCategoryFilter = isSelected ? "Todas" : item.categoria.rawValue
                                         }
-
-                                        VStack(alignment: .leading, spacing: 1) {
-                                            HStack(spacing: 4) {
-                                                Text(item.categoria.rawValue)
-                                                    .font(.system(size: 12, weight: .heavy, design: .rounded))
-                                                    .foregroundColor(.primary)
-                                                    .lineLimit(1)
-                                                Text("\(Int(round(item.porcentaje * 100)))%")
-                                                    .font(.system(size: 10, weight: .bold, design: .rounded))
-                                                    .foregroundColor(.secondary)
+                                    } label: {
+                                        HStack(spacing: 10) {
+                                            ZStack {
+                                                Circle()
+                                                    .fill(item.categoria.color.opacity(0.16))
+                                                    .frame(width: 34, height: 34)
+                                                Image(systemName: item.categoria.sfSymbol)
+                                                    .font(.system(size: 14, weight: .bold))
+                                                    .foregroundColor(item.categoria.color)
                                             }
-                                            Text(item.total.copFormatted)
-                                                .font(.system(size: 13, weight: .black, design: .rounded))
-                                                .foregroundColor(item.categoria.color)
+
+                                            VStack(alignment: .leading, spacing: 1) {
+                                                HStack(spacing: 4) {
+                                                    Text(item.categoria.rawValue)
+                                                        .font(.system(size: 12, weight: .heavy, design: .rounded))
+                                                        .foregroundColor(.primary)
+                                                        .lineLimit(1)
+                                                    Text("\(Int(round(item.porcentaje * 100)))%")
+                                                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                                                        .foregroundColor(.secondary)
+                                                }
+                                                Text(item.total.copFormatted)
+                                                    .font(.system(size: 13, weight: .black, design: .rounded))
+                                                    .foregroundColor(item.categoria.color)
+                                            }
+                                            Spacer(minLength: 0)
                                         }
-                                        Spacer(minLength: 0)
+                                        .padding(10)
+                                        .background(
+                                            isSelected
+                                                ? item.categoria.color.opacity(0.15)
+                                                : Color.primary.opacity(0.05)
+                                        )
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                                .strokeBorder(
+                                                    isSelected ? item.categoria.color : Color.clear,
+                                                    lineWidth: 1.5
+                                                )
+                                        )
+                                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                                     }
-                                    .padding(10)
-                                    .background(
-                                        isSelected
-                                            ? item.categoria.color.opacity(0.15)
-                                            : Color.primary.opacity(0.05)
-                                    )
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                            .strokeBorder(
-                                                isSelected ? item.categoria.color : Color.clear,
-                                                lineWidth: 1.5
-                                            )
-                                    )
-                                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                    .buttonStyle(LiquidScaleButtonStyle())
                                 }
-                                .buttonStyle(LiquidScaleButtonStyle())
                             }
                         }
                     }
                     .padding(18)
                     .liquidGlass(cornerRadius: 28)
 
-                    // 3. PÍLDORAS DE FILTRO POR TARJETA / DISPOSITIVO
+                    // 3. PÍLDORAS DE FILTRO POR TARJETA (TODAS TUS TARJETAS DÉBITO / CRÉDITO / WATCH)
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
-                            ForEach(filtrosTarjeta, id: \.self) { filtro in
+                            ForEach(filtrosTarjetaDinamicos, id: \.self) { filtro in
                                 let active = selectedCardFilter == filtro
                                 Button {
                                     vm.triggerHaptic(.light)
@@ -323,25 +373,47 @@ struct TarjetasView: View {
                         }
                     }
 
-                    // 4. LISTA DE MOVIMIENTOS CON TARJETA / APPLE WATCH
+                    // 4. LISTA DE MOVIMIENTOS REALES CON TUS TARJETAS
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
-                            Text("Movimientos con Tarjeta (\(filteredMovimientos.count))")
+                            Text("Mis Compras con Tarjeta (\(filteredMovimientos.count))")
                                 .font(.system(size: 15, weight: .heavy, design: .rounded))
                             Spacer()
+                            Button {
+                                showShortcutGuideSheet = true
+                            } label: {
+                                Text("¿Cómo automatizar?")
+                                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                                    .foregroundColor(Color(hex: "#4F46E5"))
+                            }
                         }
 
                         if filteredMovimientos.isEmpty {
-                            VStack(spacing: 8) {
-                                Image(systemName: "applewatch.side.right")
-                                    .font(.system(size: 28))
+                            VStack(spacing: 10) {
+                                Image(systemName: "applewatch.watchface")
+                                    .font(.system(size: 32))
+                                    .foregroundColor(Color(hex: "#4F46E5"))
+                                Text("Aún no tienes compras registradas en este filtro")
+                                    .font(.system(size: 14, weight: .heavy, design: .rounded))
+                                Text("Activa el Atajo nativo de iOS 'Registrar Pago con Tarjeta o Apple Watch' para que cada compra real se guarde sola con su categoría.")
+                                    .font(.system(size: 12, weight: .medium, design: .rounded))
                                     .foregroundColor(.secondary)
-                                Text("No hay compras en este filtro")
-                                    .font(.system(size: 14, weight: .bold, design: .rounded))
-                                    .foregroundColor(.secondary)
+                                    .multilineTextAlignment(.center)
+                                Button {
+                                    showShortcutGuideSheet = true
+                                } label: {
+                                    Text("Configurar Mi Apple Watch y Tarjetas")
+                                        .font(.system(size: 12, weight: .heavy, design: .rounded))
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 10)
+                                        .background(Color(hex: "#4F46E5"))
+                                        .foregroundColor(.white)
+                                        .clipShape(Capsule())
+                                }
+                                .padding(.top, 4)
                             }
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 24)
+                            .padding(.vertical, 20)
                         } else {
                             ForEach(filteredMovimientos) { mov in
                                 let cat = mov.categoriaEnum
@@ -374,11 +446,15 @@ struct TarjetasView: View {
                                                 .foregroundColor(.secondary)
                                                 .lineLimit(1)
                                         }
+
+                                        Text(mov.fecha)
+                                            .font(.system(size: 10, weight: .medium, design: .rounded))
+                                            .foregroundColor(.secondary.opacity(0.8))
                                     }
 
                                     Spacer()
 
-                                    VStack(alignment: .trailing, spacing: 4) {
+                                    VStack(alignment: .trailing, spacing: 6) {
                                         Text("-\(mov.monto.copFormatted)")
                                             .font(.system(size: 15, weight: .black, design: .rounded))
                                             .foregroundColor(.primary)
@@ -411,12 +487,12 @@ struct TarjetasView: View {
                 .padding(.bottom, 105)
             }
         }
-        // MODAL 1: ANOTAR PAGO CON TARJETA / WATCH MANUALMENTE
+        // MODAL 1: REGISTRAR COMPRA CON CUALQUIERA DE TUS TARJETAS DÉBITO O CRÉDITO
         .sheet(isPresented: $showAddCompraSheet) {
             NavigationStack {
                 Form {
-                    Section("Detalle del Pago") {
-                        TextField("Comercio (Ej: McDonald's, Terpel, D1, Uber)", text: $comercioInput)
+                    Section("¿Dónde pagaste y cuánto fue?") {
+                        TextField("Comercio (Ej: Terpel, D1, McDonald's, Uber...)", text: $comercioInput)
                             .onChange(of: comercioInput) { nuevo in
                                 if !nuevo.isEmpty {
                                     categoriaSeleccionada = CategoriaTarjeta.detectar(desde: nuevo)
@@ -426,7 +502,7 @@ struct TarjetasView: View {
                             .keyboardType(.numberPad)
                     }
 
-                    Section("Categoría Automática (Estilo Lukas)") {
+                    Section("Categoría Detectada (Puedes cambiarla)") {
                         Picker("Categoría", selection: $categoriaSeleccionada) {
                             ForEach(CategoriaTarjeta.allCases) { cat in
                                 Label(cat.rawValue, systemImage: cat.sfSymbol)
@@ -435,13 +511,16 @@ struct TarjetasView: View {
                         }
                     }
 
-                    Section("Tarjeta y Dispositivo") {
-                        Picker("Tarjeta usada", selection: $tarjetaSeleccionada) {
+                    Section("¿Con cuál de tus tarjetas pagaste?") {
+                        Picker("Tarjeta", selection: $tarjetaSeleccionada) {
                             ForEach(tarjetasDisponibles, id: \.self) { t in
                                 Text(t).tag(t)
                             }
                         }
-                        Picker("Pagado desde", selection: $metodoSeleccionado) {
+                        if tarjetaSeleccionada == "Otra Tarjeta..." {
+                            TextField("Escribe el nombre de tu tarjeta (Ej: Débito Colpatria)", text: $tarjetaPersonalizada)
+                        }
+                        Picker("Dispositivo", selection: $metodoSeleccionado) {
                             ForEach(metodosDisponibles, id: \.self) { m in
                                 Text(m).tag(m)
                             }
@@ -449,20 +528,27 @@ struct TarjetasView: View {
                     }
 
                     Section {
-                        Button("Registrar Movimiento") {
-                            guard let valor = Double(montoInput), valor > 0 else { return }
+                        Button("Guardar Movimiento") {
+                            let valor = RegistroPagosWalletEngine.limpiarNumeroCOP(montoInput)
+                            guard valor > 0 else { return }
                             let comercioFinal = comercioInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                                 ? "Compra \(categoriaSeleccionada.rawValue)"
                                 : comercioInput
+                            let tarjetaFinal = (tarjetaSeleccionada == "Otra Tarjeta..." && !tarjetaPersonalizada.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                ? tarjetaPersonalizada.trimmingCharacters(in: .whitespacesAndNewlines)
+                                : tarjetaSeleccionada
+
                             Task {
                                 await vm.sendAction([
                                     "accion": "registrar_gasto_tarjeta",
                                     "comercio": comercioFinal,
                                     "monto": valor,
                                     "categoria": categoriaSeleccionada.rawValue,
-                                    "tarjeta": tarjetaSeleccionada,
+                                    "tarjeta": tarjetaFinal,
                                     "metodo": metodoSeleccionado,
-                                    "es_credito": tarjetaSeleccionada.localizedCaseInsensitiveContains("crédito") || tarjetaSeleccionada.localizedCaseInsensitiveContains("nu")
+                                    "es_credito": tarjetaFinal.localizedCaseInsensitiveContains("crédito") ||
+                                                  tarjetaFinal.localizedCaseInsensitiveContains("credito") ||
+                                                  tarjetaFinal.localizedCaseInsensitiveContains("rappicard")
                                 ])
                                 showAddCompraSheet = false
                             }
@@ -470,7 +556,7 @@ struct TarjetasView: View {
                         .fontWeight(.bold)
                     }
                 }
-                .navigationTitle("Nuevo Pago con Tarjeta")
+                .navigationTitle("Registrar Pago")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
@@ -480,7 +566,57 @@ struct TarjetasView: View {
             }
             .presentationDetents([.large])
         }
-        // MODAL 2: GUÍA PASO A PASO PARA CONECTAR APPLE PAY & APPLE WATCH (COMO LUKAS)
+        // MODAL 2: LECTOR INTELIGENTE DE SMS / NOTIFICACIÓN DE CUALQUIER BANCO
+        .sheet(isPresented: $showPasteBankTextSheet) {
+            NavigationStack {
+                Form {
+                    Section("Pega el SMS o Notificación de tu Banco") {
+                        TextEditor(text: $bankMessageInput)
+                            .frame(minHeight: 110)
+                        Text("Funciona con Bancolombia, Nu, Davivienda, Nequi, Lulo, BBVA, Banco de Bogotá, etc. Ej: 'Bancolombia le informa compra por $28.500 en TERPEL con su T.Debito'")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                    }
+
+                    if let detectado = RegistroPagosWalletEngine.extraerDatosDeTextoBancario(bankMessageInput) {
+                        let cat = CategoriaTarjeta.detectar(desde: detectado.comercio)
+                        Section("Datos Detectados Automáticamente") {
+                            LabeledContent("Comercio", value: detectado.comercio)
+                            LabeledContent("Monto", value: detectado.monto.copFormatted)
+                            LabeledContent("Tarjeta", value: detectado.tarjeta)
+                            LabeledContent("Categoría", value: cat.rawValue)
+                        }
+
+                        Section {
+                            Button("Guardar Compra Detectada") {
+                                Task {
+                                    await vm.sendAction([
+                                        "accion": "registrar_gasto_tarjeta",
+                                        "comercio": detectado.comercio,
+                                        "monto": detectado.monto,
+                                        "categoria": cat.rawValue,
+                                        "tarjeta": detectado.tarjeta,
+                                        "metodo": "Notificación Bancaria",
+                                        "es_credito": detectado.tarjeta.localizedCaseInsensitiveContains("crédito") || detectado.tarjeta.localizedCaseInsensitiveContains("credito")
+                                    ])
+                                    showPasteBankTextSheet = false
+                                }
+                            }
+                            .fontWeight(.bold)
+                        }
+                    }
+                }
+                .navigationTitle("Leer SMS / Notificación")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cerrar") { showPasteBankTextSheet = false }
+                    }
+                }
+            }
+            .presentationDetents([.medium, .large])
+        }
+        // MODAL 3: CONFIGURACIÓN REAL DE ATAJOS NATIVOS (APPLE WATCH, APPLE PAY Y SMS DE BANCOS)
         .sheet(isPresented: $showShortcutGuideSheet) {
             NavigationStack {
                 ScrollView {
@@ -488,97 +624,89 @@ struct TarjetasView: View {
                         HStack(spacing: 12) {
                             ZStack {
                                 Circle()
-                                    .fill(Color(hex: "#4F46E5").opacity(0.15))
+                                    .fill(Color(hex: "#10B981").opacity(0.15))
                                     .frame(width: 52, height: 52)
                                 Image(systemName: "applewatch.radiowaves.left.and.right")
                                     .font(.system(size: 24, weight: .bold))
-                                    .foregroundColor(Color(hex: "#4F46E5"))
+                                    .foregroundColor(Color(hex: "#10B981"))
                             }
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Auto-Registro con Apple Pay y Watch")
+                                Text("Conexión Real con Todas tus Tarjetas")
                                     .font(.system(size: 17, weight: .black, design: .rounded))
-                                Text("Igual que Lukas · 100% Automático al pagar")
+                                Text("Acción nativa integrada en iOS Atajos (Sin simulaciones)")
                                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                                     .foregroundColor(.secondary)
                             }
                         }
 
-                        Text("Cada vez que acerques tu **iPhone** o tu **Apple Watch** a un datáfono para pagar con tu tarjeta Débito o Crédito, iOS anotará el gasto automáticamente en **Mis Finanzas** y detectará la categoría por el nombre del comercio.")
+                        Text("Esta app ya incluye el módulo nativo de Apple **`Registrar Pago con Tarjeta o Apple Watch`** dentro de la app **Atajos (Shortcuts)** de tu iPhone. Funciona en segundo plano sin abrir pantallas falsas y sirve para **todas tus tarjetas Débito y Crédito**.")
                             .font(.system(size: 13, weight: .medium, design: .rounded))
                             .foregroundColor(.secondary)
 
-                        VStack(alignment: .leading, spacing: 14) {
+                        // OPCIÓN A: APPLE PAY & APPLE WATCH (TRANSACCIÓN DE WALLET)
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("OPCIÓN 1 · CUANDO PAGUES CON APPLE WATCH O IPHONE (APPLE PAY)")
+                                .font(.system(size: 11, weight: .heavy, design: .rounded))
+                                .foregroundColor(Color(hex: "#4F46E5"))
+
                             ShortcutStepRow(
                                 step: "1",
-                                title: "Abre la app 'Atajos' (Shortcuts) en tu iPhone",
-                                subtitle: "Toca la pestaña 'Automatización' abajo en el centro y presiona el botón '+'."
+                                title: "Abre 'Atajos' en tu iPhone → pestaña 'Automatización' → botón '+'",
+                                subtitle: "Baja y selecciona 'Transacción' (Cuando toque para pagar con Wallet)."
                             )
                             ShortcutStepRow(
                                 step: "2",
-                                title: "Elige 'Transacción' (Wallet / Apple Pay)",
-                                subtitle: "Selecciona tus tarjetas Débito y Crédito, marca 'Ejecutar inmediatamente' y toca Siguiente."
+                                title: "Marca TODAS tus tarjetas (Débito y Crédito)",
+                                subtitle: "Elige 'Ejecutar inmediatamente' para que no te pida confirmación."
                             )
                             ShortcutStepRow(
                                 step: "3",
-                                title: "Agrega la acción 'Abrir URLs'",
-                                subtitle: "Pega este enlace mágico (reemplazando Monto, Comercio y Tarjeta con las variables de Entrada del Atajo):"
+                                title: "Busca la acción de Mis Finanzas: 'Registrar Pago con Tarjeta o Apple Watch'",
+                                subtitle: "En 'Monto' pon la variable [Monto], en 'Comercio' pon [Comercio / Nombre] y en 'Tarjeta' pon [Tarjeta o Pase]."
                             )
                         }
                         .padding(16)
                         .background(Color.primary.opacity(0.05))
                         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
 
-                        // Caja con el URL Scheme listo para copiar
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("URL PARA PEGAR EN ATAJOS:")
-                                .font(.system(size: 10, weight: .heavy, design: .rounded))
-                                .foregroundColor(.secondary)
+                        // OPCIÓN B: PARA TARJETAS FÍSICAS O BANCOS QUE ENVÍAN SMS (BANCOLOMBIA, DAVIVIENDA, ETC.)
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("OPCIÓN 2 · AUTOMÁTICO POR SMS DE TU BANCO (CUALQUIER TARJETA)")
+                                .font(.system(size: 11, weight: .heavy, design: .rounded))
+                                .foregroundColor(Color(hex: "#10B981"))
 
-                            Text("misfinanzas://pay?monto=25000&comercio=Comercio&tarjeta=Debito&metodo=AppleWatch")
-                                .font(.system(size: 12, weight: .bold, design: .monospaced))
-                                .padding(12)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color.primary.opacity(0.07))
-                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-
-                            HStack(spacing: 10) {
-                                Button {
-                                    UIPasteboard.general.string = "misfinanzas://pay?monto=25000&comercio=McDonalds&tarjeta=Debito&metodo=AppleWatch"
-                                    vm.triggerHaptic(.success)
-                                    copiedToast = true
-                                } label: {
-                                    Label(copiedToast ? "¡Copiado al Portapapeles!" : "Copiar Enlace URL", systemImage: copiedToast ? "checkmark.circle.fill" : "doc.on.doc.fill")
-                                        .font(.system(size: 13, weight: .heavy, design: .rounded))
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 12)
-                                        .background(Color(hex: "#4F46E5"))
-                                        .foregroundColor(.white)
-                                        .clipShape(Capsule())
-                                }
-
-                                Button {
-                                    if let testURL = URL(string: "misfinanzas://pay?monto=18500&comercio=Starbucks%20Cafe&tarjeta=Debito&metodo=Apple%20Watch") {
-                                        showShortcutGuideSheet = false
-                                        vm.handleIncomingURL(testURL)
-                                    }
-                                } label: {
-                                    Label("Simular Pago Watch", systemImage: "play.fill")
-                                        .font(.system(size: 13, weight: .heavy, design: .rounded))
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 12)
-                                        .background(Color(hex: "#10B981"))
-                                        .foregroundColor(.white)
-                                        .clipShape(Capsule())
-                                }
-                            }
+                            ShortcutStepRow(
+                                step: "1",
+                                title: "En 'Automatización' → '+' → elige 'Mensaje' (SMS)",
+                                subtitle: "En 'Mensaje contiene' escribe la palabra: compra (o el código de tu banco, ej. 85432)."
+                            )
+                            ShortcutStepRow(
+                                step: "2",
+                                title: "Agrega la acción 'Registrar Pago con Tarjeta o Apple Watch'",
+                                subtitle: "Pasa el [Contenido del mensaje] en el campo 'Comercio o Texto'. La app extrae sola el valor ($), el comercio, el banco y la categoría."
+                            )
                         }
                         .padding(16)
-                        .background(Color.primary.opacity(0.04))
+                        .background(Color.primary.opacity(0.05))
                         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+
+                        Button {
+                            if let shortcutsURL = URL(string: "shortcuts://") {
+                                UIApplication.shared.open(shortcutsURL)
+                            }
+                        } label: {
+                            Label("Abrir App 'Atajos' de mi iPhone Ahora", systemImage: "arrow.up.forward.app.fill")
+                                .font(.system(size: 14, weight: .heavy, design: .rounded))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(Color(hex: "#4F46E5"))
+                                .foregroundColor(.white)
+                                .clipShape(Capsule())
+                        }
                     }
                     .padding(20)
                 }
-                .navigationTitle("Apple Pay & Watch")
+                .navigationTitle("Conectar Mis Tarjetas")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
