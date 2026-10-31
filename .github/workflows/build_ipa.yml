@@ -59,7 +59,7 @@ jobs:
           plutil -convert binary1 Payload/MisFinanzas.app/Info.plist
           echo -n "APPL????" > Payload/MisFinanzas.app/PkgInfo
 
-          codesign --force --deep --sign - Payload/MisFinanzas.app
+          codesign --force --deep --identifier "MisFinanzas" --sign - Payload/MisFinanzas.app
           zip -r9 MisFinanzas.ipa Payload
           ls -lh MisFinanzas.ipa
 
