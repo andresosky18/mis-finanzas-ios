@@ -298,6 +298,9 @@ final class FinanzasViewModel: ObservableObject {
             apiURL = Self.defaultLiveURL
         }
 
+        // Solicitar permiso de notificaciones locales en iPhone y Apple Watch para avisar la categoría al instante
+        RegistroPagosWalletEngine.requestNotificationPermissionIfNeeded()
+
         // Escuchar pagos registrados en segundo plano por AppIntents (Apple Watch / Apple Pay / SMS Bancario)
         NotificationCenter.default.addObserver(
             forName: RegistroPagosWalletEngine.notificationName,
@@ -312,6 +315,18 @@ final class FinanzasViewModel: ObservableObject {
                     // Sincronizar también con pagos.xo.je en segundo plano
                     await self.syncCardExpenseToRemote(mov)
                 }
+            }
+        }
+
+        // Sincronizar automáticamente en segundo plano al iniciar y cada vez que la app vuelve a primer plano
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.willEnterForegroundNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self = self else { return }
+            Task { @MainActor in
+                self.reloadFromLocalCache()
             }
         }
 

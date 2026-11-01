@@ -232,7 +232,7 @@ struct TarjetasView: View {
                                 }
                                 showPasteBankTextSheet = true
                             } label: {
-                                Label("Leer SMS Banco", systemImage: "message.badge.waveform.fill")
+                                Label("Leer Push / QR / SMS", systemImage: "qrcode.viewfinder")
                                     .font(.system(size: 12, weight: .heavy, design: .rounded))
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 12)
@@ -645,45 +645,50 @@ struct TarjetasView: View {
 
                         // OPCIÓN A: APPLE PAY & APPLE WATCH (TRANSACCIÓN DE WALLET)
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("OPCIÓN 1 · CUANDO PAGUES CON APPLE WATCH O IPHONE (APPLE PAY)")
+                            Text("1️⃣ AUTOMÁTICO CON APPLE WATCH Y APPLE PAY (DATÁFONO)")
                                 .font(.system(size: 11, weight: .heavy, design: .rounded))
                                 .foregroundColor(Color(hex: "#4F46E5"))
 
                             ShortcutStepRow(
                                 step: "1",
-                                title: "Abre 'Atajos' en tu iPhone → pestaña 'Automatización' → botón '+'",
-                                subtitle: "Baja y selecciona 'Transacción' (Cuando toque para pagar con Wallet)."
+                                title: "En 'Atajos' → 'Automatización' → '+' → elige 'Transacción'",
+                                subtitle: "Se dispara en el instante en que acercas el Apple Watch o el iPhone al datáfono."
                             )
                             ShortcutStepRow(
                                 step: "2",
                                 title: "Marca TODAS tus tarjetas (Débito y Crédito)",
-                                subtitle: "Elige 'Ejecutar inmediatamente' para que no te pida confirmación."
+                                subtitle: "Selecciona 'Ejecutar inmediatamente' para que sea 100% automático sin tocar nada."
                             )
                             ShortcutStepRow(
                                 step: "3",
-                                title: "Busca la acción de Mis Finanzas: 'Registrar Pago con Tarjeta o Apple Watch'",
-                                subtitle: "En 'Monto' pon la variable [Monto], en 'Comercio' pon [Comercio / Nombre] y en 'Tarjeta' pon [Tarjeta o Pase]."
+                                title: "Agrega la acción: 'Registrar Pago con Tarjeta o Apple Watch'",
+                                subtitle: "Pasa [Monto] en Monto, [Comercio o Nombre] en Comercio y [Tarjeta o Pase] en Tarjeta. Te llegará una notificación al reloj/celular diciendo la Categoría."
                             )
                         }
                         .padding(16)
                         .background(Color.primary.opacity(0.05))
                         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
 
-                        // OPCIÓN B: PARA TARJETAS FÍSICAS O BANCOS QUE ENVÍAN SMS (BANCOLOMBIA, DAVIVIENDA, ETC.)
+                        // OPCIÓN B: TARJETA FÍSICA, QR Y PUSH BANCARIO (VÍA CORREO / PUSH + APP DE TU BANCO)
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("OPCIÓN 2 · AUTOMÁTICO POR SMS DE TU BANCO (CUALQUIER TARJETA)")
+                            Text("2️⃣ AUTOMÁTICO PARA TARJETA FÍSICA, QR Y NOTIFICACIÓN DE BANCOS")
                                 .font(.system(size: 11, weight: .heavy, design: .rounded))
                                 .foregroundColor(Color(hex: "#10B981"))
 
                             ShortcutStepRow(
-                                step: "1",
-                                title: "En 'Automatización' → '+' → elige 'Mensaje' (SMS)",
-                                subtitle: "En 'Mensaje contiene' escribe la palabra: compra (o el código de tu banco, ej. 85432)."
+                                step: "A",
+                                title: "Por Correo / Alerta Automática del Banco (100% sin tocar nada)",
+                                subtitle: "En 'Automatización' → '+' → 'Correo electrónico' (Asunto contiene: 'Compra' o 'Transferencia' o 'QR') → ejecuta la acción de Mis Finanzas 'Auto-Detectar Pago de Correo, Push, SMS o QR' pasando el [Contenido]. Guarda pagos con Tarjeta Física y QR al instante."
                             )
                             ShortcutStepRow(
-                                step: "2",
-                                title: "Agrega la acción 'Registrar Pago con Tarjeta o Apple Watch'",
-                                subtitle: "Pasa el [Contenido del mensaje] en el campo 'Comercio o Texto'. La app extrae sola el valor ($), el comercio, el banco y la categoría."
+                                step: "B",
+                                title: "Al pagar con QR desde la App de tu Banco (Bancolombia, Nequi, Nu, Davivienda)",
+                                subtitle: "En 'Automatización' → '+' → 'App' (Cuando se cierre Bancolombia / Nequi / Nu) o 'Tocar dos veces atrás' → agrega 'Tomar captura de pantalla' → 'Extraer texto de imagen' → 'Auto-Detectar Pago de Correo, Push, SMS o QR'. ¡Lee el comprobante QR o la notificación Push en pantalla y lo guarda solo!"
+                            )
+                            ShortcutStepRow(
+                                step: "C",
+                                title: "También dejamos activo el de SMS Bancario",
+                                subtitle: "En 'Automatización' → '+' → 'Mensaje' (contiene 'compra' o 'pagaste') → 'Auto-Detectar Pago de Correo, Push, SMS o QR'. Así tienes cubiertos Push, Correo, QR y SMS al mismo tiempo."
                             )
                         }
                         .padding(16)

@@ -1,71 +1,130 @@
 import Foundation
 import AppIntents
+import UserNotifications
 
-// MARK: - Motor Compartido de Registro Real de Pagos (AppIntents en Background + URL Scheme + UI)
+// MARK: - Motor Compartido de Registro Real de Pagos (Apple Watch, Tarjeta Física, QR, Correo, SMS, Push)
 enum RegistroPagosWalletEngine {
     static let storageKey = "finanzas_personal_cache_v4_xoje"
     static let notificationName = Notification.Name("MisFinanzasDidReceiveWalletPayment")
+    static let liveWebhookURL = "http://pagos.xo.je/mis_finanzas.php?i=1"
 
-    // Parseador Inteligente de SMS / Notificación Bancaria o Texto libre de Apple Pay
-    // Soporta Bancolombia, Nu, Davivienda, Nequi, BBVA, Banco de Bogotá, Lulo, RappiPay y texto directo de Wallet
-    static func extraerDatosDeTextoBancario(_ texto: String) -> (comercio: String, monto: Double, tarjeta: String)? {
-        let limpio = texto.trimmingCharacters(in: .whitespacesAndNewlines)
+    // Solicitar permiso de notificaciones locales en iPhone y Apple Watch para avisar la categoría al instante
+    static func requestNotificationPermissionIfNeeded() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+    }
+
+    // Enviar Notificación Push Local inmediata al iPhone y Apple Watch con la Categoría detectada
+    static func dispararNotificacionCategoria(_ item: GastoTarjetaItem) {
+        let content = UNMutableNotificationContent()
+        content.title = "💳 Pago guardado en \(item.categoria)"
+        content.subtitle = "\(item.comercio) • \(item.monto.copFormatted)"
+        content.body = "Pagado con \(item.tarjeta) (\(item.metodo)). Ya quedó anotado en Mis Finanzas."
+        content.sound = .default
+
+        let req = UNNotificationRequest(
+            identifier: "misfinanzas-pay-\(item.id)",
+            content: content,
+            trigger: nil // Inmediato
+        )
+        UNUserNotificationCenter.current().add(req, withCompletionHandler: nil)
+    }
+
+    // Parseador Universal Inteligente:
+    // Soporta:
+    // 1. Notificaciones Push / Correos / SMS de Bancolombia, Nu, Nequi, Davivienda, DaviPlata, Lulo, BBVA, Banco de Bogotá, Scotiabank Colpatria, RappiPay
+    // 2. Comprobantes de pago por QR (Transferencia QR, Bre-B, Nequi QR, Bancolombia A la mano)
+    // 3. Texto libre o OCR de pantalla ("Compra en D1 por $45.000")
+    static func extraerDatosDeTextoBancario(_ texto: String) -> (comercio: String, monto: Double, tarjeta: String, metodo: String)? {
+        let limpio = texto
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\r", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !limpio.isEmpty else { return nil }
 
-        // 1. Extraer monto ($25.000, $ 120,500, COP 45.000, 38000)
+        // 1. Extraer monto ($25.000, $ 120,500.00, COP 45.000, por valor de $38.000)
         var montoDetectado: Double = 0
-        let regexMonto = try? NSRegularExpression(
-            pattern: #"(?:\$|COP|por|valor\s+de)\s*([0-9]{1,3}(?:[.,][0-9]{3})+(?:[.,][0-9]{1,2})?|[0-9]{3,10})"#,
-            options: [.caseInsensitive]
-        )
-        if let match = regexMonto?.firstMatch(in: limpio, range: NSRange(limpio.startIndex..., in: limpio)),
-           match.numberOfRanges >= 2,
-           let r = Range(match.range(at: 1), in: limpio) {
-            montoDetectado = limpiarNumeroCOP(String(limpio[r]))
-        } else {
-            // Buscar cualquier número de al menos 4 dígitos
-            let fallbackNum = try? NSRegularExpression(pattern: #"\b([0-9]{1,3}(?:[.,][0-9]{3})+|[0-9]{4,9})\b"#)
-            if let m = fallbackNum?.firstMatch(in: limpio, range: NSRange(limpio.startIndex..., in: limpio)),
-               let r = Range(m.range(at: 1), in: limpio) {
-                montoDetectado = limpiarNumeroCOP(String(limpio[r]))
+        let patronesMonto = [
+            #"(?:\$|COP|valor\s+de|compra\s+por|transferencia\s+por|pagaste|enviaste|pago\s+exitoso\s+por)\s*\$?\s*([0-9]{1,3}(?:[.,][0-9]{3})+(?:[.,][0-9]{1,2})?|[0-9]{4,10})"#,
+            #"\$([0-9]{1,3}(?:[.,][0-9]{3})+(?:[.,][0-9]{1,2})?|[0-9]{3,10})"#,
+            #"\b([0-9]{1,3}(?:\.[0-9]{3})+)\b"#
+        ]
+
+        for pat in patronesMonto {
+            if let regex = try? NSRegularExpression(pattern: pat, options: [.caseInsensitive]),
+               let match = regex.firstMatch(in: limpio, range: NSRange(limpio.startIndex..., in: limpio)),
+               match.numberOfRanges >= 2,
+               let r = Range(match.range(at: 1), in: limpio) {
+                let candidato = limpiarNumeroCOP(String(limpio[r]))
+                if candidato >= 500 {
+                    montoDetectado = candidato
+                    break
+                }
             }
         }
 
-        // 2. Detectar banco / tarjeta del texto
-        var tarjetaDetectada = "Apple Pay / Tarjeta"
+        // 2. Detectar si fue QR, Transferencia, Apple Watch, Tarjeta Física o Push
         let lower = limpio.lowercased()
-        if lower.contains("bancolombia") {
-            tarjetaDetectada = lower.contains("crédito") || lower.contains("credito") || lower.contains("t.cred") ? "Crédito Bancolombia" : "Débito Bancolombia"
-        } else if lower.contains("nu") || lower.contains("nubank") {
-            tarjetaDetectada = lower.contains("débito") || lower.contains("debito") ? "Débito Nu" : "Crédito Nu"
-        } else if lower.contains("nequi") {
-            tarjetaDetectada = "Tarjeta Nequi"
-        } else if lower.contains("davivienda") || lower.contains("daviplata") {
-            tarjetaDetectada = lower.contains("crédito") || lower.contains("credito") ? "Crédito Davivienda" : "Débito Davivienda"
-        } else if lower.contains("lulo") {
-            tarjetaDetectada = "Débito Lulo Bank"
-        } else if lower.contains("rappipay") || lower.contains("rappiCard") {
-            tarjetaDetectada = "RappiCard"
-        } else if lower.contains("bbva") {
-            tarjetaDetectada = "Tarjeta BBVA"
-        } else if lower.contains("bogota") || lower.contains("bogotá") {
-            tarjetaDetectada = "Banco de Bogotá"
+        var metodoDetectado = "Automático"
+        if lower.contains("qr") || lower.contains("código qr") || lower.contains("codigo qr") || lower.contains("bre-b") {
+            metodoDetectado = "Pago con QR"
+        } else if lower.contains("apple pay") || lower.contains("apple watch") || lower.contains("wallet") {
+            metodoDetectado = "Apple Watch / Pay"
+        } else if lower.contains("transferencia") || lower.contains("enviaste") || lower.contains("pse") {
+            metodoDetectado = "Transferencia / QR"
+        } else {
+            metodoDetectado = "Tarjeta Física / Push"
         }
 
-        // 3. Extraer nombre del comercio (ej: "en MCDONALDS", "en TERPEL", "en D1")
-        var comercioDetectado = limpio
-        let regexComercio = try? NSRegularExpression(
-            pattern: #"(?:compra\s+en|pagaste\s+en|en\s+el\s+comercio|en)\s+([A-Za-z0-9ÁÉÍÓÚáéíóúÑñ\s\.\-\*\/]{2,35}?)(?:\s+por|\s+con|\s+el\s+\d|\s+\$|\.|,|$)"#,
-            options: [.caseInsensitive]
-        )
-        if let m = regexComercio?.firstMatch(in: limpio, range: NSRange(limpio.startIndex..., in: limpio)),
-           m.numberOfRanges >= 2,
-           let r = Range(m.range(at: 1), in: limpio) {
-            comercioDetectado = String(limpio[r]).trimmingCharacters(in: .whitespacesAndNewlines)
+        // 3. Detectar Banco y si es Débito o Crédito
+        var tarjetaDetectada = "Tarjeta Débito"
+        let esCreditoTexto = lower.contains("crédito") || lower.contains("credito") || lower.contains("t.cred") || lower.contains("tc ") || lower.contains("mastercard") && lower.contains("nu")
+
+        if lower.contains("bancolombia") {
+            if metodoDetectado.contains("QR") {
+                tarjetaDetectada = "QR Bancolombia"
+            } else {
+                tarjetaDetectada = esCreditoTexto ? "Crédito Bancolombia" : "Débito Bancolombia"
+            }
+        } else if lower.contains("nu") || lower.contains("nubank") || lower.contains("nu colombia") {
+            tarjetaDetectada = (lower.contains("débito") || lower.contains("debito") || lower.contains("cuenta nu")) ? "Débito Nu" : "Crédito Nu"
+        } else if lower.contains("nequi") {
+            tarjetaDetectada = metodoDetectado.contains("QR") ? "QR Nequi" : "Tarjeta Nequi"
+        } else if lower.contains("davivienda") || lower.contains("daviplata") {
+            tarjetaDetectada = esCreditoTexto ? "Crédito Davivienda" : "Débito Davivienda"
+        } else if lower.contains("lulo") {
+            tarjetaDetectada = "Débito Lulo Bank"
+        } else if lower.contains("rappipay") || lower.contains("rappicard") {
+            tarjetaDetectada = "RappiCard"
+        } else if lower.contains("bbva") {
+            tarjetaDetectada = esCreditoTexto ? "Crédito BBVA" : "Débito BBVA"
+        } else if lower.contains("bogota") || lower.contains("bogotá") {
+            tarjetaDetectada = esCreditoTexto ? "Crédito Banco de Bogotá" : "Débito Banco de Bogotá"
+        } else if lower.contains("colpatria") || lower.contains("scotiabank") {
+            tarjetaDetectada = esCreditoTexto ? "Crédito Colpatria" : "Débito Colpatria"
+        } else if esCreditoTexto {
+            tarjetaDetectada = "Tarjeta Crédito"
+        }
+
+        // 4. Extraer el nombre del Comercio o Destinatario QR
+        var comercioDetectado = "Compra con \(tarjetaDetectada)"
+        let patronesComercio = [
+            #"(?:compra\s+en|pagaste\s+en|en\s+el\s+comercio|establecimiento|comercio:?|a\s+nombre\s+de|transferencia\s+a|enviaste\s+a|pago\s+a|en)\s+([A-Za-z0-9ÁÉÍÓÚáéíóúÑñ\s\.\-\*\/&]{2,36}?)(?:\s+por\s+|\s+con\s+tu|\s+con\s+su|\s+el\s+\d|\s+exitos|\s+desde|\s+\$|\.|,|$)"#
+        ]
+        for patC in patronesComercio {
+            if let regexC = try? NSRegularExpression(pattern: patC, options: [.caseInsensitive]),
+               let m = regexC.firstMatch(in: limpio, range: NSRange(limpio.startIndex..., in: limpio)),
+               m.numberOfRanges >= 2,
+               let r = Range(m.range(at: 1), in: limpio) {
+                let candidato = String(limpio[r]).trimmingCharacters(in: .whitespacesAndNewlines)
+                if candidato.count >= 2 {
+                    comercioDetectado = candidato
+                    break
+                }
+            }
         }
 
         guard montoDetectado > 0 else { return nil }
-        return (comercio: comercioDetectado, monto: montoDetectado, tarjeta: tarjetaDetectada)
+        return (comercio: comercioDetectado, monto: montoDetectado, tarjeta: tarjetaDetectada, metodo: metodoDetectado)
     }
 
     static func limpiarNumeroCOP(_ raw: String) -> Double {
@@ -73,7 +132,6 @@ enum RegistroPagosWalletEngine {
             .replacingOccurrences(of: "COP", with: "")
             .replacingOccurrences(of: "$", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        // Si termina en ,00 o .00 (centavos), quitar los centavos
         if s.hasSuffix(",00") || s.hasSuffix(".00") {
             s = String(s.dropLast(3))
         }
@@ -98,7 +156,7 @@ enum RegistroPagosWalletEngine {
         let fechaActual = formatter.string(from: Date())
 
         let comercioLimpio = comercio.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? "Pago Contactless"
+            ? "Compra Automática"
             : comercio.trimmingCharacters(in: .whitespacesAndNewlines)
 
         let tarjetaLimpia = tarjeta.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -110,7 +168,8 @@ enum RegistroPagosWalletEngine {
         let esCredito = lowerCard.contains("crédito") ||
                         lowerCard.contains("credito") ||
                         lowerCard.contains("tc") ||
-                        lowerCard.contains("mastercard") && !lowerCard.contains("débito") && !lowerCard.contains("debito") && lowerCard.contains("nu")
+                        lowerCard.contains("rappicard") ||
+                        (lowerCard.contains("nu") && !lowerCard.contains("débito") && !lowerCard.contains("debito"))
 
         let nuevoMovimiento = GastoTarjetaItem(
             id: UUID().uuidString,
@@ -123,7 +182,7 @@ enum RegistroPagosWalletEngine {
             esCredito: esCredito
         )
 
-        // 1. Actualizar almacenamiento persistente local de la App (UserDefaults)
+        // 1. Guardar inmediatamente en almacenamiento local de la App
         var finanzas: FinanzasData
         if let data = UserDefaults.standard.data(forKey: storageKey),
            let decoded = try? JSONDecoder().decode(FinanzasData.self, from: data) {
@@ -153,7 +212,10 @@ enum RegistroPagosWalletEngine {
             UserDefaults.standard.set(encoded, forKey: storageKey)
         }
 
-        // Notificar a la UI si está abierta
+        // 2. Disparar notificación local en el iPhone / Apple Watch indicando la categoría
+        dispararNotificacionCategoria(nuevoMovimiento)
+
+        // 3. Notificar a la UI si está abierta
         DispatchQueue.main.async {
             NotificationCenter.default.post(name: notificationName, object: nuevoMovimiento)
         }
@@ -162,26 +224,25 @@ enum RegistroPagosWalletEngine {
     }
 }
 
-// MARK: - Acción Nativa de iOS AppIntents para la app Atajos ("Registrar Pago de Wallet / Apple Watch")
+// MARK: - 1. AppIntent para Transacciones de Apple Watch / Apple Pay (Wallet)
 @available(iOS 16.0, *)
 struct RegistrarPagoWalletIntent: AppIntent {
     static var title: LocalizedStringResource = "Registrar Pago con Tarjeta o Apple Watch"
     static var description = IntentDescription(
-        "Registra automáticamente en Mis Finanzas cualquier compra pagada con tus tarjetas Débito o Crédito en Apple Pay, Apple Watch o SMS bancario y detecta su categoría."
+        "Se ejecuta en segundo plano cuando pagas con Apple Watch, Apple Pay, Tarjeta Física, QR, Correo o SMS y guarda el movimiento con su categoría."
     )
-    // Se ejecuta en 2do plano al pagar con el reloj o el celular sin siquiera obligarte a desbloquear la app
     static var openAppWhenRun: Bool = false
 
-    @Parameter(title: "Comercio o Texto de la Compra", default: "Compra Apple Pay")
+    @Parameter(title: "Comercio o Texto Completo (Push / Correo / SMS / QR)", default: "Compra Apple Pay")
     var comercio: String
 
-    @Parameter(title: "Monto Pagado (COP)", default: 0)
+    @Parameter(title: "Monto Pagado (Dejar en 0 si pasas texto completo)", default: 0)
     var monto: Double
 
-    @Parameter(title: "Nombre de la Tarjeta (Cualquier Débito o Crédito)", default: "Tarjeta Wallet")
+    @Parameter(title: "Nombre de la Tarjeta o Banco", default: "Tarjeta Wallet")
     var tarjeta: String
 
-    @Parameter(title: "Dispositivo (Apple Watch o iPhone)", default: "Apple Watch / Pay")
+    @Parameter(title: "Método (Apple Watch, Celular, Tarjeta Física, QR)", default: "Apple Watch / Pay")
     var dispositivo: String
 
     static var parameterSummary: some ParameterSummary {
@@ -192,29 +253,67 @@ struct RegistrarPagoWalletIntent: AppIntent {
         var comercioFinal = comercio
         var montoFinal = monto
         var tarjetaFinal = tarjeta
+        var metodoFinal = dispositivo
 
-        // Si el usuario pasó un mensaje completo del banco o notificación en el campo comercio
+        // Si viene de un Correo Bancario, SMS, Notificación Push o Comprobante QR
         if montoFinal <= 0, let extraido = RegistroPagosWalletEngine.extraerDatosDeTextoBancario(comercio) {
             comercioFinal = extraido.comercio
             montoFinal = extraido.monto
             if tarjetaFinal == "Tarjeta Wallet" || tarjetaFinal.isEmpty {
                 tarjetaFinal = extraido.tarjeta
             }
+            if metodoFinal == "Apple Watch / Pay" {
+                metodoFinal = extraido.metodo
+            }
         }
 
         guard montoFinal > 0 else {
-            return .result(dialog: "No se detectó un monto mayor a $0 para registrar.")
+            return .result(dialog: "No se detectó un monto válido mayor a $0.")
         }
 
         let item = RegistroPagosWalletEngine.guardarPagoReal(
             comercio: comercioFinal,
             monto: montoFinal,
             tarjeta: tarjetaFinal,
-            dispositivo: dispositivo
+            dispositivo: metodoFinal
         )
 
         return .result(
-            dialog: "✅ Guardado en Mis Finanzas: \(item.comercio) por \(item.monto.copFormatted) en la categoría \(item.categoria) (\(item.tarjeta))."
+            dialog: "✅ Guardado en \(item.categoria): \(item.comercio) por \(item.monto.copFormatted) con \(item.tarjeta)."
+        )
+    }
+}
+
+// MARK: - 2. AppIntent Especial para Tarjeta Física, QR, Correo Bancario y Notificación Push
+@available(iOS 16.0, *)
+struct RegistrarPagoTextoBancarioIntent: AppIntent {
+    static var title: LocalizedStringResource = "Auto-Detectar Pago de Correo, Push, SMS o QR"
+    static var description = IntentDescription(
+        "Pega o pasa automáticamente el texto de un correo del banco, notificación push, SMS o comprobante QR. Extrae solo el valor, el comercio, la tarjeta y la categoría."
+    )
+    static var openAppWhenRun: Bool = false
+
+    @Parameter(title: "Texto de la Notificación Push, Correo, SMS o Pantalla")
+    var textoNotificacion: String
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("Auto-detectar compra y categoría desde \(\.$textoNotificacion)")
+    }
+
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        guard let extraido = RegistroPagosWalletEngine.extraerDatosDeTextoBancario(textoNotificacion) else {
+            return .result(dialog: "No se encontró un monto en pesos ($) dentro del texto recibido.")
+        }
+
+        let item = RegistroPagosWalletEngine.guardarPagoReal(
+            comercio: extraido.comercio,
+            monto: extraido.monto,
+            tarjeta: extraido.tarjeta,
+            dispositivo: extraido.metodo
+        )
+
+        return .result(
+            dialog: "✅ \(item.categoria): \(item.comercio) (\(item.monto.copFormatted)) con \(item.tarjeta) [\(item.metodo)]."
         )
     }
 }
@@ -230,8 +329,17 @@ struct MisFinanzasShortcutsProvider: AppShortcutsProvider {
                 "Anotar gasto con tarjeta en \(.applicationName)",
                 "Guardar compra de Apple Watch en \(.applicationName)"
             ],
-            shortTitle: "Registrar Pago Tarjeta",
+            shortTitle: "Registrar Pago Watch / Tarjeta",
             systemImageName: "applewatch.radiowaves.left.and.right"
+        )
+        AppShortcut(
+            intent: RegistrarPagoTextoBancarioIntent(),
+            phrases: [
+                "Detectar pago bancario en \(.applicationName)",
+                "Leer comprobante QR en \(.applicationName)"
+            ],
+            shortTitle: "Auto-Detectar Push / QR / Correo",
+            systemImageName: "qrcode.viewfinder"
         )
     }
 }
