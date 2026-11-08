@@ -4,9 +4,9 @@ import UserNotifications
 
 // MARK: - Motor Compartido de Registro Real de Pagos (Apple Watch, Tarjeta Física, QR, Correo, SMS, Push)
 enum RegistroPagosWalletEngine {
-    static let storageKey = "finanzas_personal_cache_v4_xoje"
+    static let storageKey = "finanzas_personal_cache_v5_xoje"
     static let notificationName = Notification.Name("MisFinanzasDidReceiveWalletPayment")
-    static let liveWebhookURL = "http://pagos.xo.je/mis_finanzas.php?i=1"
+    static let liveWebhookURL = "http://pagos.xo.je/api_finanzas.php"
 
     // Solicitar permiso de notificaciones locales en iPhone y Apple Watch para avisar la categoría al instante
     static func requestNotificationPermissionIfNeeded() {
@@ -41,11 +41,18 @@ enum RegistroPagosWalletEngine {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !limpio.isEmpty else { return nil }
 
-        // 1. Extraer monto ($25.000, $ 120,500.00, COP 45.000, por valor de $38.000)
+        // 1. Extraer monto ($25.000, $ 120,500.00, COP 20,465, por valor de $38.000)
+        // Ignorar si es una transferencia RECIBIDA ("Recibiste 40.000,00" o "Te llegó dinero")
+        let lowerCheck = limpio.lowercased()
+        if lowerCheck.contains("recibiste ") || lowerCheck.contains("te llegó dinero") || lowerCheck.contains("te llego dinero") {
+            return nil
+        }
+
         var montoDetectado: Double = 0
         let patronesMonto = [
-            #"(?:\$|COP|valor\s+de|compra\s+por|transferencia\s+por|pagaste|enviaste|pago\s+exitoso\s+por)\s*\$?\s*([0-9]{1,3}(?:[.,][0-9]{3})+(?:[.,][0-9]{1,2})?|[0-9]{4,10})"#,
+            #"(?:\$|COP|valor\s+de|compra\s+aprobada\s+por|compra\s+por|transferencia\s+por|pagaste|enviaste|pago\s+exitoso\s+por)\s*\$?\s*([0-9]{1,3}(?:[.,][0-9]{3})+(?:[.,][0-9]{1,2})?|[0-9]{4,10})"#,
             #"\$([0-9]{1,3}(?:[.,][0-9]{3})+(?:[.,][0-9]{1,2})?|[0-9]{3,10})"#,
+            #"\bCOP\s*([0-9]{1,3}(?:[.,][0-9]{3})+|[0-9]{3,10})\b"#,
             #"\b([0-9]{1,3}(?:\.[0-9]{3})+)\b"#
         ]
 
@@ -215,12 +222,64 @@ enum RegistroPagosWalletEngine {
         // 2. Disparar notificación local en el iPhone / Apple Watch indicando la categoría
         dispararNotificacionCategoria(nuevoMovimiento)
 
-        // 3. Notificar a la UI si está abierta
+        // 3. Sincronizar directamente en segundo plano con pagos.xo.je/api_finanzas.php (aunque la app esté cerrada)
+        Task {
+            await subirPagoAServidorRemoto(nuevoMovimiento)
+        }
+
+        // 4. Notificar a la UI si está abierta
         DispatchQueue.main.async {
             NotificationCenter.default.post(name: notificationName, object: nuevoMovimiento)
         }
 
         return nuevoMovimiento
+    }
+
+    static func subirPagoAServidorRemoto(_ mov: GastoTarjetaItem) async {
+        guard let url = URL(string: liveWebhookURL) else { return }
+        let savedPin = UserDefaults.standard.string(forKey: "finanzas_user_pin") ?? "1234"
+        var cachedCookie = UserDefaults.standard.string(forKey: "pagos_xoje_test_cookie") ?? "df86a58167736717237940b9bc671454"
+
+        func sendPost(cookie: String) async throws -> String {
+            var req = URLRequest(url: url)
+            req.httpMethod = "POST"
+            req.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)", forHTTPHeaderField: "User-Agent")
+            req.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
+            req.setValue(savedPin, forHTTPHeaderField: "X-Auth-Pin")
+            if !cookie.isEmpty {
+                req.setValue("__test=\(cookie)", forHTTPHeaderField: "Cookie")
+            }
+            let params: [String: String] = [
+                "pin": savedPin,
+                "accion": "registrar_gasto_tarjeta",
+                "comercio": mov.comercio,
+                "monto": String(Int(mov.monto)),
+                "categoria": mov.categoria,
+                "tarjeta": mov.tarjeta,
+                "metodo": mov.metodo
+            ]
+            let body = params.map { k, v in
+                let ke = k.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? k
+                let ve = v.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? v
+                return "\(ke)=\(ve)"
+            }.joined(separator: "&")
+            req.httpBody = body.data(using: .utf8)
+
+            let (data, _) = try await URLSession.shared.data(for: req)
+            return String(data: data, encoding: .utf8) ?? ""
+        }
+
+        do {
+            let text = try await sendPost(cookie: cachedCookie)
+            if text.contains("slowAES.decrypt") || text.contains("/aes.js"),
+               let newCookie = InfinityFreeAESDecryptor.extractTestCookie(from: text) {
+                cachedCookie = newCookie
+                UserDefaults.standard.set(newCookie, forKey: "pagos_xoje_test_cookie")
+                _ = try await sendPost(cookie: newCookie)
+            }
+        } catch {
+            // Queda en caché local y se sube al abrir la app
+        }
     }
 }
 

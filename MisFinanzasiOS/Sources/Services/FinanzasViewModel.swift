@@ -257,12 +257,12 @@ enum LiveHTMLFinanzasParser {
 // MARK: - ViewModel Principal Nativo SwiftUI Conectado Directamente a pagos.xo.je
 @MainActor
 final class FinanzasViewModel: ObservableObject {
-    static let defaultLiveURL = "http://pagos.xo.je/mis_finanzas.php?i=1"
+    static let defaultLiveURL = "http://pagos.xo.je/api_finanzas.php"
 
-    @AppStorage("finanzas_api_url_v4") var apiURL: String = "http://pagos.xo.je/mis_finanzas.php?i=1"
+    @AppStorage("finanzas_api_url_v5") var apiURL: String = "http://pagos.xo.je/api_finanzas.php"
     @AppStorage("finanzas_user_pin") var savedPin: String = "1234"
     @AppStorage("finanzas_is_unlocked") var isUnlocked: Bool = false
-    @AppStorage("pagos_xoje_test_cookie") private var cachedTestCookie: String = "a4ab21be42c5ca6d5fd36f5acf1e2be0"
+    @AppStorage("pagos_xoje_test_cookie") private var cachedTestCookie: String = "df86a58167736717237940b9bc671454"
 
     @Published var finanzas: FinanzasData
     @Published var isLoading: Bool = false
@@ -271,7 +271,7 @@ final class FinanzasViewModel: ObservableObject {
     @Published var navigateToTab: Int? = nil
     @Published var lastApplePayToast: String? = nil
 
-    private let cacheKey = "finanzas_personal_cache_v4_xoje"
+    private let cacheKey = "finanzas_personal_cache_v5_xoje"
     private lazy var urlSession: URLSession = {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 12
@@ -281,7 +281,7 @@ final class FinanzasViewModel: ObservableObject {
     }()
 
     init() {
-        if let data = UserDefaults.standard.data(forKey: "finanzas_personal_cache_v4_xoje"),
+        if let data = UserDefaults.standard.data(forKey: "finanzas_personal_cache_v5_xoje"),
            var cached = try? JSONDecoder().decode(FinanzasData.self, from: data) {
             cached.recalculateAll()
             self.finanzas = cached
@@ -289,12 +289,12 @@ final class FinanzasViewModel: ObservableObject {
             let initial = FinanzasData.defaultAndresData()
             self.finanzas = initial
             if let encoded = try? JSONEncoder().encode(initial) {
-                UserDefaults.standard.set(encoded, forKey: "finanzas_personal_cache_v4_xoje")
+                UserDefaults.standard.set(encoded, forKey: "finanzas_personal_cache_v5_xoje")
             }
         }
 
-        // Asegurar que siempre apunte al servidor real pagos.xo.je
-        if apiURL.isEmpty || apiURL.contains("tu-dominio") || apiURL.contains("tudominio") {
+        // Asegurar que siempre apunte al endpoint API JSON real pagos.xo.je/api_finanzas.php
+        if apiURL.isEmpty || apiURL.contains("tu-dominio") || apiURL.contains("tudominio") || apiURL.contains("mis_finanzas.php") {
             apiURL = Self.defaultLiveURL
         }
 
@@ -327,6 +327,7 @@ final class FinanzasViewModel: ObservableObject {
             guard let self = self else { return }
             Task { @MainActor in
                 self.reloadFromLocalCache()
+                await self.fetchAllData()
             }
         }
 
@@ -482,19 +483,38 @@ final class FinanzasViewModel: ObservableObject {
         }
     }
 
-    // MARK: - Cliente HTTP con Resolución Automática de Cookie __test AES-128 de pagos.xo.je
+    // MARK: - Cliente HTTP con Resolución Automática de Cookie __test AES-128 + PIN de pagos.xo.je
     private func performLiveRequest(url: URL, formParams: [String: String]?, isRetry: Bool = false) async throws -> String {
-        var request = URLRequest(url: url)
+        let pinActual = savedPin.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "1234" : savedPin.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Si es GET, agregar ?pin=1234 a la URL para que api_finanzas.php autentique sin pedir sesión previa
+        var finalURL = url
+        if formParams == nil, var comps = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            var qItems = comps.queryItems ?? []
+            if !qItems.contains(where: { $0.name == "pin" }) {
+                qItems.append(URLQueryItem(name: "pin", value: pinActual))
+            }
+            comps.queryItems = qItems
+            if let built = comps.url {
+                finalURL = built
+            }
+        }
+
+        var request = URLRequest(url: finalURL)
         request.httpShouldHandleCookies = true
         request.setValue(
             "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
             forHTTPHeaderField: "User-Agent"
         )
+        request.setValue(pinActual, forHTTPHeaderField: "X-Auth-Pin")
         if !cachedTestCookie.isEmpty {
             request.setValue("__test=\(cachedTestCookie)", forHTTPHeaderField: "Cookie")
         }
 
-        if let formParams = formParams {
+        if var formParams = formParams {
+            if formParams["pin"] == nil {
+                formParams["pin"] = pinActual
+            }
             request.httpMethod = "POST"
             request.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
             let bodyString = formParams.map { key, val in
@@ -539,6 +559,16 @@ final class FinanzasViewModel: ObservableObject {
            let apiResp = try? JSONDecoder().decode(ApiResponse.self, from: jsonData),
            apiResp.ok,
            var remoteFinanzas = apiResp.finanzas {
+            // Preservar gastos de tarjeta locales que aún no se hayan subido al servidor y unirlos sin duplicar
+            let remoteIDs = Set(remoteFinanzas.gastosTarjeta.map { $0.id })
+            let localOnlyCards = self.finanzas.gastosTarjeta.filter { !remoteIDs.contains($0.id) }
+            if !localOnlyCards.isEmpty {
+                remoteFinanzas.gastosTarjeta = localOnlyCards + remoteFinanzas.gastosTarjeta
+                // Subir en segundo plano al servidor los pagos locales pendientes
+                for pendingCard in localOnlyCards {
+                    Task { await self.syncCardExpenseToRemote(pendingCard) }
+                }
+            }
             remoteFinanzas.recalculateAll()
             withAnimation(.spring(response: 0.38, dampingFraction: 0.8)) {
                 self.finanzas = remoteFinanzas

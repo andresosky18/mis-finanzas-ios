@@ -72,41 +72,54 @@ enum CategoriaTarjeta: String, Codable, CaseIterable, Identifiable {
            lower.contains("corral") || lower.contains("kfc") || lower.contains("starbucks") ||
            lower.contains("juan valdez") || lower.contains("restaurante") || lower.contains("almuerzo") ||
            lower.contains("pizza") || lower.contains("burger") || lower.contains("cafe") ||
-           lower.contains("café") || lower.contains("panaderia") || lower.contains("comida") {
+           lower.contains("café") || lower.contains("panaderia") || lower.contains("comida") ||
+           lower.contains("tostao") || lower.contains("domino") || lower.contains("frisby") ||
+           lower.contains("kokoriko") || lower.contains("subway") {
             return .comida
         }
         if lower.contains("terpel") || lower.contains("primax") || lower.contains("biomax") ||
            lower.contains("texaco") || lower.contains("gasolina") || lower.contains("uber") ||
            lower.contains("didi") || lower.contains("cabify") || lower.contains("peaje") ||
-           lower.contains("parqueadero") || lower.contains("transporte") || lower.contains("moto") {
+           lower.contains("parqueadero") || lower.contains("transporte") || lower.contains("moto") ||
+           lower.contains("eds ") || lower.contains("coesco") || lower.contains("petrobras") ||
+           lower.contains("puma ") || lower.contains("estacion ") || lower.contains("patrimonio aut") ||
+           lower.contains("recaudo bogota") || lower.contains("sitp") || lower.contains("transmilenio") ||
+           lower.contains("tullave") || lower.contains("gopass") || lower.contains("flypass") {
             return .transporte
         }
         if lower.contains("d1") || lower.contains("ara") || lower.contains("exito") ||
            lower.contains("éxito") || lower.contains("carulla") || lower.contains("olimpica") ||
            lower.contains("olímpica") || lower.contains("alkosto") || lower.contains("makro") ||
-           lower.contains("dollarcity") || lower.contains("mercado") || lower.contains("supermercado") {
+           lower.contains("dollarcity") || lower.contains("mercado") || lower.contains("supermercado") ||
+           lower.contains("oxxo") || lower.contains("isimo") || lower.contains("ísimo") ||
+           lower.contains("surtimax") || lower.contains("jumbo") || lower.contains("metro") ||
+           lower.contains("fruver") {
             return .mercado
         }
         if lower.contains("netflix") || lower.contains("spotify") || lower.contains("icloud") ||
            lower.contains("apple.com/bill") || lower.contains("claro") || lower.contains("movistar") ||
            lower.contains("tigo") || lower.contains("youtube") || lower.contains("disney") ||
-           lower.contains("prime") || lower.contains("hbo") || lower.contains("chatgpt") {
+           lower.contains("prime") || lower.contains("hbo") || lower.contains("chatgpt") ||
+           lower.contains("openai") || lower.contains("crunchyroll") {
             return .suscripciones
         }
         if lower.contains("cine") || lower.contains("cinecolombia") || lower.contains("bar") ||
            lower.contains("steam") || lower.contains("playstation") || lower.contains("xbox") ||
-           lower.contains("concierto") || lower.contains("salida") {
+           lower.contains("concierto") || lower.contains("salida") || lower.contains("play ") {
             return .ocio
         }
         if lower.contains("drogueria") || lower.contains("droguería") || lower.contains("farmatodo") ||
            lower.contains("cruz verde") || lower.contains("pasteur") || lower.contains("rebaja") ||
-           lower.contains("salud") || lower.contains("medico") || lower.contains("médico") {
+           lower.contains("salud") || lower.contains("medico") || lower.contains("médico") ||
+           lower.contains("sura") || lower.contains("cto medico") || lower.contains("sanitas") ||
+           lower.contains("compensar") || lower.contains("clinica") || lower.contains("clínica") ||
+           lower.contains("colsanitas") || lower.contains("colsubsidio") {
             return .salud
         }
         if lower.contains("amazon") || lower.contains("mercadolibre") || lower.contains("mercado libre") ||
            lower.contains("falabella") || lower.contains("zara") || lower.contains("hm") ||
            lower.contains("nike") || lower.contains("adidas") || lower.contains("ropa") ||
-           lower.contains("tienda") {
+           lower.contains("tienda") || lower.contains("homecenter") || lower.contains("ktronix") {
             return .compras
         }
         return .otros
@@ -326,9 +339,9 @@ struct FinanzasData: Codable {
             sueldoBase: 2_500_000,
             auxTransporte: 124_548,
             bonoQ1: 160_000,
-            ahorroCorvanca: 1_575_000,
+            ahorroCorvanca: 1_425_000,
             totalIngresosMensual: 3_909_096,
-            totalDeudaPendiente: 8_627_734,
+            totalDeudaPendiente: 11_969_506,
             netoQ1: 1_318_215,
             netoQ2: 1_158_215,
             flujoQ1: 75_286,
@@ -369,10 +382,12 @@ struct FinanzasData: Codable {
                 "Parqueadero U"
             ],
             deudasLista: [
-                DeudaItem(nombre: "Moto", total: 11_500_000, pendiente: 2_446_961, cuota: 453_000, icono: "bike"),
-                DeudaItem(nombre: "Universidad", total: 1_280_338, pendiente: 619_138, cuota: 112_228, icono: "graduation-cap"),
-                DeudaItem(nombre: "celular", total: 4_223_405, pendiente: 3_761_635, cuota: 133_000, icono: "phone"),
-                DeudaItem(nombre: "TV", total: 1_800_000, pendiente: 1_800_000, cuota: 225_000, icono: "tv")
+                DeudaItem(nombre: "Moto", total: 11_500_000, pendiente: 2_672_961, cuota: 453_000, icono: "bike"),
+                DeudaItem(nombre: "Universidad", total: 1_280_338, pendiente: 506_910, cuota: 112_228, icono: "graduation-cap"),
+                DeudaItem(nombre: "celular", total: 4_223_405, pendiente: 3_894_635, cuota: 133_000, icono: "phone"),
+                DeudaItem(nombre: "TV", total: 1_800_000, pendiente: 1_800_000, cuota: 225_000, icono: "tv"),
+                DeudaItem(nombre: "play 5", total: 2_568_000, pendiente: 2_675_000, cuota: 1, icono: "gamepad-2"),
+                DeudaItem(nombre: "play plus", total: 420_000, pendiente: 420_000, cuota: 35_000, icono: "gamepad-2")
             ],
             metasLista: [],
             historial: [
