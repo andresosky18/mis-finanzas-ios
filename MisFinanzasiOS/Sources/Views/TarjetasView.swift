@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import PhotosUI
 
 struct TarjetasView: View {
     @EnvironmentObject var vm: FinanzasViewModel
@@ -12,23 +13,26 @@ struct TarjetasView: View {
     @State private var showPasteBankTextSheet = false
     @State private var showShortcutGuideSheet = false
 
+    // Selector de Captura de Pantalla (OCR Vision)
+    @State private var selectedPhotoItem: PhotosPickerItem? = nil
+    @State private var isScanningScreenshot: Bool = false
+
     // Formulario nueva compra con cualquiera de tus tarjetas / Apple Watch / Celular
     @State private var comercioInput = ""
     @State private var montoInput = ""
     @State private var categoriaSeleccionada: CategoriaTarjeta = .comida
-    @State private var tarjetaSeleccionada = "Débito Bancolombia"
+    @State private var tarjetaSeleccionada = "Débito Nu"
     @State private var tarjetaPersonalizada = ""
     @State private var metodoSeleccionado = "Apple Watch"
 
-    // Pegar SMS / Notificación bancaria de cualquier banco
+    // Pegar SMS / Notificación bancaria o resultado de OCR de captura
     @State private var bankMessageInput = ""
 
-    // Todas las tarjetas colombianas (Débito y Crédito) + opción de escribir cualquier otra
     private let tarjetasDisponibles = [
-        "Débito Bancolombia",
-        "Crédito Bancolombia",
         "Débito Nu",
         "Crédito Nu",
+        "Débito Bancolombia",
+        "Crédito Bancolombia",
         "Tarjeta Nequi",
         "Débito Davivienda",
         "Crédito Davivienda",
@@ -43,10 +47,9 @@ struct TarjetasView: View {
         "Apple Watch",
         "Apple Pay (Celular)",
         "Tarjeta Física (Datáfono)",
-        "PSE / Compra Online"
+        "Pago con QR / Transferencia"
     ]
 
-    // Filtros dinámicos basados en las tarjetas reales que has usado + Débito / Crédito / Watch
     private var filtrosTarjetaDinamicos: [String] {
         var base = ["Todas", "Todas Débito", "Todas Crédito", "Apple Watch"]
         let tarjetasUsadas = Set(vm.finanzas.gastosTarjeta.map { $0.tarjeta })
@@ -100,7 +103,7 @@ struct TarjetasView: View {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 16) {
 
-                    // Toast en vivo cuando entra un pago real desde tu Apple Watch, iPhone o SMS
+                    // Toast en vivo cuando entra un pago real desde tu Apple Watch, iPhone o Captura
                     if let toast = vm.lastApplePayToast {
                         HStack(spacing: 10) {
                             Image(systemName: "checkmark.seal.fill")
@@ -110,6 +113,12 @@ struct TarjetasView: View {
                                 .font(.system(size: 12, weight: .heavy, design: .rounded))
                                 .foregroundColor(.white)
                             Spacer()
+                            Button {
+                                withAnimation { vm.lastApplePayToast = nil }
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.white.opacity(0.8))
+                            }
                         }
                         .padding(14)
                         .background(
@@ -203,7 +212,7 @@ struct TarjetasView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                         }
 
-                        // 3 Botones Reales: Registrar Compra | Leer SMS/Notificación | Configurar Atajo Watch/Cel
+                        // Botones de Acción Rápida: Nuevo Pago | Escanear Captura de Fotos | Leer Texto
                         HStack(spacing: 8) {
                             Button {
                                 vm.triggerHaptic(.light)
@@ -224,7 +233,6 @@ struct TarjetasView: View {
 
                             Button {
                                 vm.triggerHaptic(.light)
-                                // Si hay texto en el portapapeles, pre-cargarlo
                                 if let clip = UIPasteboard.general.string, !clip.isEmpty {
                                     bankMessageInput = clip
                                 } else {
@@ -232,7 +240,7 @@ struct TarjetasView: View {
                                 }
                                 showPasteBankTextSheet = true
                             } label: {
-                                Label("Leer Push / QR / SMS", systemImage: "qrcode.viewfinder")
+                                Label("Leer Push / Captura", systemImage: "qrcode.viewfinder")
                                     .font(.system(size: 12, weight: .heavy, design: .rounded))
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 12)
@@ -274,7 +282,6 @@ struct TarjetasView: View {
                             }
                             .padding(.vertical, 6)
                         } else {
-                            // Barra horizontal segmentada multicolor estilo Lukas
                             GeometryReader { geo in
                                 HStack(spacing: 4) {
                                     ForEach(resumenPorCategoria, id: \.categoria.id) { item in
@@ -345,7 +352,7 @@ struct TarjetasView: View {
                     .padding(18)
                     .liquidGlass(cornerRadius: 28)
 
-                    // 3. PÍLDORAS DE FILTRO POR TARJETA (TODAS TUS TARJETAS DÉBITO / CRÉDITO / WATCH)
+                    // 3. PÍLDORAS DE FILTRO POR TARJETA
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
                             ForEach(filtrosTarjetaDinamicos, id: \.self) { filtro in
@@ -395,20 +402,33 @@ struct TarjetasView: View {
                                     .foregroundColor(Color(hex: "#4F46E5"))
                                 Text("Aún no tienes compras registradas en este filtro")
                                     .font(.system(size: 14, weight: .heavy, design: .rounded))
-                                Text("Activa el Atajo nativo de iOS 'Registrar Pago con Tarjeta o Apple Watch' para que cada compra real se guarde sola con su categoría.")
+                                Text("Puedes escanear una captura de tus notificaciones de Wallet o Nu aquí mismo o usar el atajo automático.")
                                     .font(.system(size: 12, weight: .medium, design: .rounded))
                                     .foregroundColor(.secondary)
                                     .multilineTextAlignment(.center)
-                                Button {
-                                    showShortcutGuideSheet = true
-                                } label: {
-                                    Text("Configurar Mi Apple Watch y Tarjetas")
-                                        .font(.system(size: 12, weight: .heavy, design: .rounded))
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 10)
-                                        .background(Color(hex: "#4F46E5"))
-                                        .foregroundColor(.white)
-                                        .clipShape(Capsule())
+
+                                HStack(spacing: 10) {
+                                    PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                                        Label("Escanear Captura", systemImage: "photo.badge.plus")
+                                            .font(.system(size: 12, weight: .heavy, design: .rounded))
+                                            .padding(.horizontal, 14)
+                                            .padding(.vertical, 10)
+                                            .background(Color(hex: "#10B981"))
+                                            .foregroundColor(.white)
+                                            .clipShape(Capsule())
+                                    }
+
+                                    Button {
+                                        showShortcutGuideSheet = true
+                                    } label: {
+                                        Text("Guía Apple Watch")
+                                            .font(.system(size: 12, weight: .heavy, design: .rounded))
+                                            .padding(.horizontal, 14)
+                                            .padding(.vertical, 10)
+                                            .background(Color(hex: "#4F46E5"))
+                                            .foregroundColor(.white)
+                                            .clipShape(Capsule())
+                                    }
                                 }
                                 .padding(.top, 4)
                             }
@@ -487,12 +507,41 @@ struct TarjetasView: View {
                 .padding(.bottom, 105)
             }
         }
-        // MODAL 1: REGISTRAR COMPRA CON CUALQUIERA DE TUS TARJETAS DÉBITO O CRÉDITO
+        .onChange(of: vm.shouldOpenQuickScannerSheet) { abrir in
+            if abrir {
+                vm.shouldOpenQuickScannerSheet = false
+                if let clip = UIPasteboard.general.string, !clip.isEmpty {
+                    bankMessageInput = clip
+                }
+                showPasteBankTextSheet = true
+            }
+        }
+        .onChange(of: selectedPhotoItem) { newItem in
+            guard let item = newItem else { return }
+            isScanningScreenshot = true
+            Task {
+                if let data = try? await item.loadTransferable(type: Data.self),
+                   let uiImage = UIImage(data: data) {
+                    let textoExtraido = await FinanzasViewModel.extraerTextoOCR(de: uiImage)
+                    bankMessageInput = textoExtraido
+                    let detectados = RegistroPagosWalletEngine.extraerTodosLosPagosDeTexto(textoExtraido)
+                    if !detectados.isEmpty {
+                        await vm.registrarPagosDetectadosEnLote(detectados)
+                        showPasteBankTextSheet = false
+                    } else {
+                        showPasteBankTextSheet = true
+                    }
+                }
+                isScanningScreenshot = false
+                selectedPhotoItem = nil
+            }
+        }
+        // MODAL 1: REGISTRAR COMPRA MANUAL
         .sheet(isPresented: $showAddCompraSheet) {
             NavigationStack {
                 Form {
                     Section("¿Dónde pagaste y cuánto fue?") {
-                        TextField("Comercio (Ej: Terpel, D1, McDonald's, Uber...)", text: $comercioInput)
+                        TextField("Comercio (Ej: Terpel, D1, Oxxo, Sura, Uber...)", text: $comercioInput)
                             .onChange(of: comercioInput) { nuevo in
                                 if !nuevo.isEmpty {
                                     categoriaSeleccionada = CategoriaTarjeta.detectar(desde: nuevo)
@@ -566,47 +615,69 @@ struct TarjetasView: View {
             }
             .presentationDetents([.large])
         }
-        // MODAL 2: LECTOR INTELIGENTE DE SMS / NOTIFICACIÓN DE CUALQUIER BANCO
+        // MODAL 2: ESCÁNER DE CAPTURAS DE PANTALLA Y LECTOR DE NOTIFICACIONES PUSH / QR / SMS
         .sheet(isPresented: $showPasteBankTextSheet) {
             NavigationStack {
                 Form {
-                    Section("Pega el SMS o Notificación de tu Banco") {
+                    Section("1. Escanear Captura de Pantalla (Wallet / Nu / Banco)") {
+                        PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                            HStack(spacing: 10) {
+                                Image(systemName: isScanningScreenshot ? "hourglass" : "photo.on.rectangle.angled")
+                                    .font(.system(size: 20, weight: .bold))
+                                    .foregroundColor(Color(hex: "#10B981"))
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(isScanningScreenshot ? "Leyendo pagos de la imagen..." : "Elegir Captura de Pantalla de Fotos")
+                                        .font(.system(size: 14, weight: .heavy, design: .rounded))
+                                    Text("Detecta todas las compras de Wallet, Nu, Bancolombia o Nequi que salgan en la captura y las guarda de una vez.")
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
+
+                    Section("2. O pega el texto de la notificación / SMS") {
                         TextEditor(text: $bankMessageInput)
-                            .frame(minHeight: 110)
-                        Text("Funciona con Bancolombia, Nu, Davivienda, Nequi, Lulo, BBVA, Banco de Bogotá, etc. Ej: 'Bancolombia le informa compra por $28.500 en TERPEL con su T.Debito'")
+                            .frame(minHeight: 100)
+                        Text("Soporta notificaciones de Wallet ('Nu / Eds Coesco / COP 20,465') y de Nubank (incluso cortadas como 'Compra aprobada por $3.9... Compra en PATRIMONIO AUT DE ESTR').")
                             .font(.system(size: 11))
                             .foregroundColor(.secondary)
                     }
 
-                    if let detectado = RegistroPagosWalletEngine.extraerDatosDeTextoBancario(bankMessageInput) {
-                        let cat = CategoriaTarjeta.detectar(desde: detectado.comercio)
-                        Section("Datos Detectados Automáticamente") {
-                            LabeledContent("Comercio", value: detectado.comercio)
-                            LabeledContent("Monto", value: detectado.monto.copFormatted)
-                            LabeledContent("Tarjeta", value: detectado.tarjeta)
-                            LabeledContent("Categoría", value: cat.rawValue)
+                    let pagosDetectados = RegistroPagosWalletEngine.extraerTodosLosPagosDeTexto(bankMessageInput)
+                    if !pagosDetectados.isEmpty {
+                        Section("Compras Detectadas (\(pagosDetectados.count))") {
+                            ForEach(Array(pagosDetectados.enumerated()), id: \.offset) { _, det in
+                                let cat = CategoriaTarjeta.detectar(desde: det.comercio)
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(det.comercio)
+                                            .font(.system(size: 14, weight: .bold, design: .rounded))
+                                        Text("\(cat.rawValue) • \(det.tarjeta)")
+                                            .font(.system(size: 11, weight: .semibold))
+                                            .foregroundColor(cat.color)
+                                    }
+                                    Spacer()
+                                    Text(det.monto.copFormatted)
+                                        .font(.system(size: 14, weight: .black, design: .rounded))
+                                }
+                            }
                         }
 
                         Section {
-                            Button("Guardar Compra Detectada") {
+                            Button("Guardar \(pagosDetectados.count) Compra(s) Ahora") {
                                 Task {
-                                    await vm.sendAction([
-                                        "accion": "registrar_gasto_tarjeta",
-                                        "comercio": detectado.comercio,
-                                        "monto": detectado.monto,
-                                        "categoria": cat.rawValue,
-                                        "tarjeta": detectado.tarjeta,
-                                        "metodo": "Notificación Bancaria",
-                                        "es_credito": detectado.tarjeta.localizedCaseInsensitiveContains("crédito") || detectado.tarjeta.localizedCaseInsensitiveContains("credito")
-                                    ])
+                                    await vm.registrarPagosDetectadosEnLote(pagosDetectados)
                                     showPasteBankTextSheet = false
                                 }
                             }
                             .fontWeight(.bold)
+                            .foregroundColor(Color(hex: "#10B981"))
                         }
                     }
                 }
-                .navigationTitle("Leer SMS / Notificación")
+                .navigationTitle("Leer Push / Captura / QR")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
@@ -614,9 +685,9 @@ struct TarjetasView: View {
                     }
                 }
             }
-            .presentationDetents([.medium, .large])
+            .presentationDetents([.large])
         }
-        // MODAL 3: CONFIGURACIÓN REAL DE ATAJOS NATIVOS (APPLE WATCH, APPLE PAY Y SMS DE BANCOS)
+        // MODAL 3: GUÍA DE CONFIGURACIÓN PARA QUE FUNCIONE INCLUSO CON EL IPHONE BLOQUEADO
         .sheet(isPresented: $showShortcutGuideSheet) {
             NavigationStack {
                 ScrollView {
@@ -626,69 +697,33 @@ struct TarjetasView: View {
                                 Circle()
                                     .fill(Color(hex: "#10B981").opacity(0.15))
                                     .frame(width: 52, height: 52)
-                                Image(systemName: "applewatch.radiowaves.left.and.right")
+                                Image(systemName: "lock.open.applewatch")
                                     .font(.system(size: 24, weight: .bold))
                                     .foregroundColor(Color(hex: "#10B981"))
                             }
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Conexión Real con Todas tus Tarjetas")
+                                Text("Registro con iPhone Bloqueado o Prendido")
                                     .font(.system(size: 17, weight: .black, design: .rounded))
-                                Text("Acción nativa integrada en iOS Atajos (Sin simulaciones)")
+                                Text("Guarda pagos de Apple Watch, Wallet y Nu")
                                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                                     .foregroundColor(.secondary)
                             }
                         }
 
-                        Text("Esta app ya incluye el módulo nativo de Apple **`Registrar Pago con Tarjeta o Apple Watch`** dentro de la app **Atajos (Shortcuts)** de tu iPhone. Funciona en segundo plano sin abrir pantallas falsas y sirve para **todas tus tarjetas Débito y Crédito**.")
-                            .font(.system(size: 13, weight: .medium, design: .rounded))
-                            .foregroundColor(.secondary)
-
-                        // OPCIÓN A: APPLE PAY & APPLE WATCH (TRANSACCIÓN DE WALLET)
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("1️⃣ AUTOMÁTICO CON APPLE WATCH Y APPLE PAY (DATÁFONO)")
+                            Text("1️⃣ PARA QUE GUARDE AUNQUE EL IPHONE ESTÉ BLOQUEADO")
                                 .font(.system(size: 11, weight: .heavy, design: .rounded))
                                 .foregroundColor(Color(hex: "#4F46E5"))
 
                             ShortcutStepRow(
                                 step: "1",
-                                title: "En 'Atajos' → 'Automatización' → '+' → elige 'Transacción'",
-                                subtitle: "Se dispara en el instante en que acercas el Apple Watch o el iPhone al datáfono."
+                                title: "Usa la acción de Mis Finanzas en lugar de 'Abrir URL'",
+                                subtitle: "En el atajo 'Pagar en MisFinanzas', busca abajo la app 'Mis Finanzas' y elige 'Auto-Detectar Pago de Correo, Push, SMS o QR' (o 'Registrar Pago con Tarjeta o Apple Watch'). Esa acción corre en segundo plano sin desbloquear la pantalla."
                             )
                             ShortcutStepRow(
                                 step: "2",
-                                title: "Marca TODAS tus tarjetas (Débito y Crédito)",
-                                subtitle: "Selecciona 'Ejecutar inmediatamente' para que sea 100% automático sin tocar nada."
-                            )
-                            ShortcutStepRow(
-                                step: "3",
-                                title: "Agrega la acción: 'Registrar Pago con Tarjeta o Apple Watch'",
-                                subtitle: "Pasa [Monto] en Monto, [Comercio o Nombre] en Comercio y [Tarjeta o Pase] en Tarjeta. Te llegará una notificación al reloj/celular diciendo la Categoría."
-                            )
-                        }
-                        .padding(16)
-                        .background(Color.primary.opacity(0.05))
-                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-
-                        // OPCIÓN B: TARJETA FÍSICA, QR Y PUSH BANCARIO (VÍA CORREO / PUSH + APP DE TU BANCO)
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("2️⃣ AUTOMÁTICO PARA TARJETA FÍSICA, QR Y NOTIFICACIÓN DE BANCOS")
-                                .font(.system(size: 11, weight: .heavy, design: .rounded))
-                                .foregroundColor(Color(hex: "#10B981"))
-
-                            ShortcutStepRow(
-                                step: "A",
-                                title: "Por Correo / Alerta Automática del Banco (100% sin tocar nada)",
-                                subtitle: "En 'Automatización' → '+' → 'Correo electrónico' (Asunto contiene: 'Compra' o 'Transferencia' o 'QR') → ejecuta la acción de Mis Finanzas 'Auto-Detectar Pago de Correo, Push, SMS o QR' pasando el [Contenido]. Guarda pagos con Tarjeta Física y QR al instante."
-                            )
-                            ShortcutStepRow(
-                                step: "B",
-                                title: "Al pagar con QR desde la App de tu Banco (Bancolombia, Nequi, Nu, Davivienda)",
-                                subtitle: "En 'Automatización' → '+' → 'App' (Cuando se cierre Bancolombia / Nequi / Nu) o 'Tocar dos veces atrás' → agrega 'Tomar captura de pantalla' → 'Extraer texto de imagen' → 'Auto-Detectar Pago de Correo, Push, SMS o QR'. ¡Lee el comprobante QR o la notificación Push en pantalla y lo guarda solo!"
-                            )
-                            ShortcutStepRow(
-                                step: "C",
-                                title: "También dejamos activo el de SMS Bancario",
-                                subtitle: "En 'Automatización' → '+' → 'Mensaje' (contiene 'compra' o 'pagaste') → 'Auto-Detectar Pago de Correo, Push, SMS o QR'. Así tienes cubiertos Push, Correo, QR y SMS al mismo tiempo."
+                                title: "En la Automatización de Wallet ('Transacción')",
+                                subtitle: "Asegúrate de que dentro del bloque 'Ejecutar atajo Pagar en MisFinanzas' tengas seleccionada 'Entrada: Entrada del atajo' (o pon los bloques directamente dentro de la automatización Transacción)."
                             )
                         }
                         .padding(16)

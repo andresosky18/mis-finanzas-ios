@@ -3,6 +3,7 @@ import SwiftUI
 import UIKit
 import LocalAuthentication
 import CommonCrypto
+import Vision
 
 // MARK: - Delegado URLSession que acepta certificados SSL de InfinityFree sin alertas
 final class SSLTrustSessionDelegate: NSObject, URLSessionDelegate {
@@ -270,11 +271,14 @@ final class FinanzasViewModel: ObservableObject {
     @Published var syncStatusText: String = "En vivo • pagos.xo.je"
     @Published var navigateToTab: Int? = nil
     @Published var lastApplePayToast: String? = nil
+    @Published var shouldOpenQuickScannerSheet: Bool = false
 
     private let cacheKey = "finanzas_personal_cache_v5_xoje"
+    private var lastLocalMutationDate: Date = .distantPast
+
     private lazy var urlSession: URLSession = {
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 12
+        config.timeoutIntervalForRequest = 14
         config.httpCookieAcceptPolicy = .always
         config.httpShouldSetCookies = true
         return URLSession(configuration: config, delegate: SSLTrustSessionDelegate(), delegateQueue: nil)
@@ -293,12 +297,10 @@ final class FinanzasViewModel: ObservableObject {
             }
         }
 
-        // Asegurar que siempre apunte al endpoint API JSON real pagos.xo.je/api_finanzas.php
         if apiURL.isEmpty || apiURL.contains("tu-dominio") || apiURL.contains("tudominio") || apiURL.contains("mis_finanzas.php") {
             apiURL = Self.defaultLiveURL
         }
 
-        // Solicitar permiso de notificaciones locales en iPhone y Apple Watch para avisar la categoría al instante
         RegistroPagosWalletEngine.requestNotificationPermissionIfNeeded()
 
         // Escuchar pagos registrados en segundo plano por AppIntents (Apple Watch / Apple Pay / SMS Bancario)
@@ -309,16 +311,16 @@ final class FinanzasViewModel: ObservableObject {
         ) { [weak self] note in
             guard let self = self else { return }
             Task { @MainActor in
+                self.lastLocalMutationDate = Date()
                 self.reloadFromLocalCache()
                 if let mov = note.object as? GastoTarjetaItem {
                     self.lastApplePayToast = "✅ \(mov.comercio): \(mov.monto.copFormatted) → \(mov.categoria) (\(mov.tarjeta))"
-                    // Sincronizar también con pagos.xo.je en segundo plano
                     await self.syncCardExpenseToRemote(mov)
                 }
             }
         }
 
-        // Sincronizar automáticamente en segundo plano al iniciar y cada vez que la app vuelve a primer plano
+        // Sincronizar automáticamente en segundo plano al volver a primer plano
         NotificationCenter.default.addObserver(
             forName: UIApplication.willEnterForegroundNotification,
             object: nil,
@@ -327,11 +329,13 @@ final class FinanzasViewModel: ObservableObject {
             guard let self = self else { return }
             Task { @MainActor in
                 self.reloadFromLocalCache()
-                await self.fetchAllData()
+                // Si se acaba de registrar un pago por URL scheme hace menos de 3 segundos, esperar antes de hacer GET
+                if Date().timeIntervalSince(self.lastLocalMutationDate) > 3.0 {
+                    await self.fetchAllData()
+                }
             }
         }
 
-        // Sincronizar automáticamente en segundo plano al iniciar
         Task {
             await fetchAllData()
         }
@@ -403,7 +407,7 @@ final class FinanzasViewModel: ObservableObject {
         return true
     }
 
-    // MARK: - Sincronización en Vivo con https://pagos.xo.je/mis_finanzas.php
+    // MARK: - Sincronización en Vivo con http://pagos.xo.je/api_finanzas.php
     func fetchAllData() async {
         reloadFromLocalCache()
         guard let targetURL = normalizedLiveURL() else { return }
@@ -425,8 +429,8 @@ final class FinanzasViewModel: ObservableObject {
     // MARK: - Enviar Acción en Vivo a pagos.xo.je + Actualización Instantánea
     func sendAction(_ payload: [String: Any]) async {
         triggerHaptic(.medium)
+        lastLocalMutationDate = Date()
 
-        // Detectar si es un toggle_gasto que pasa de NO pagado a PAGADO para descontar deuda en el servidor si aún tiene el PHP anterior
         let accion = (payload["accion"] as? String) ?? ""
         var extraDebtAbono: (deuda: String, monto: Double)? = nil
 
@@ -450,7 +454,7 @@ final class FinanzasViewModel: ObservableObject {
         saveLocalFinanzas()
         triggerHaptic(.success)
 
-        // 2. Enviar POST directo a pagos.xo.je/mis_finanzas.php
+        // 2. Enviar POST directo a pagos.xo.je/api_finanzas.php
         guard let targetURL = normalizedLiveURL() else { return }
         var formParams: [String: String] = [:]
         for (k, v) in payload {
@@ -459,7 +463,6 @@ final class FinanzasViewModel: ObservableObject {
 
         do {
             let responseText = try await performLiveRequest(url: targetURL, formParams: formParams)
-            // Si el servidor aún tiene la versión de mis_finanzas.php que no descuenta sola al hacer toggle_gasto, enviamos abonar_deuda automáticamente
             if let abono = extraDebtAbono,
                let parsed = LiveHTMLFinanzasParser.parse(html: responseText, fallback: finanzas),
                let remoteDeuda = parsed.deudasLista.first(where: { $0.nombre == abono.deuda }),
@@ -487,9 +490,9 @@ final class FinanzasViewModel: ObservableObject {
     private func performLiveRequest(url: URL, formParams: [String: String]?, isRetry: Bool = false) async throws -> String {
         let pinActual = savedPin.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "1234" : savedPin.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // Si es GET, agregar ?pin=1234 a la URL para que api_finanzas.php autentique sin pedir sesión previa
+        // Incluir siempre ?pin=1234 en la URL tanto en GET como en POST
         var finalURL = url
-        if formParams == nil, var comps = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+        if var comps = URLComponents(url: url, resolvingAgainstBaseURL: false) {
             var qItems = comps.queryItems ?? []
             if !qItems.contains(where: { $0.name == "pin" }) {
                 qItems.append(URLQueryItem(name: "pin", value: pinActual))
@@ -546,7 +549,6 @@ final class FinanzasViewModel: ObservableObject {
         if raw.isEmpty {
             raw = Self.defaultLiveURL
         }
-        // pagos.xo.je responde por HTTP sin errores de certificado SSL
         if raw.hasPrefix("https://pagos.xo.je") {
             raw = raw.replacingOccurrences(of: "https://pagos.xo.je", with: "http://pagos.xo.je")
         }
@@ -554,17 +556,20 @@ final class FinanzasViewModel: ObservableObject {
     }
 
     private func applyLiveResponse(_ text: String) {
-        // 1. Intentar decodificar si es JSON (api_finanzas.php)
         if let jsonData = text.data(using: .utf8),
            let apiResp = try? JSONDecoder().decode(ApiResponse.self, from: jsonData),
            apiResp.ok,
            var remoteFinanzas = apiResp.finanzas {
-            // Preservar gastos de tarjeta locales que aún no se hayan subido al servidor y unirlos sin duplicar
-            let remoteIDs = Set(remoteFinanzas.gastosTarjeta.map { $0.id })
-            let localOnlyCards = self.finanzas.gastosTarjeta.filter { !remoteIDs.contains($0.id) }
+            // Preservar gastos de tarjeta locales que aún no estén en el servidor (comparando por ID o por Comercio+Monto)
+            let localOnlyCards = self.finanzas.gastosTarjeta.filter { localCard in
+                !remoteFinanzas.gastosTarjeta.contains { remoteCard in
+                    remoteCard.id == localCard.id ||
+                    (remoteCard.comercio.caseInsensitiveCompare(localCard.comercio) == .orderedSame &&
+                     abs(remoteCard.monto - localCard.monto) < 1)
+                }
+            }
             if !localOnlyCards.isEmpty {
                 remoteFinanzas.gastosTarjeta = localOnlyCards + remoteFinanzas.gastosTarjeta
-                // Subir en segundo plano al servidor los pagos locales pendientes
                 for pendingCard in localOnlyCards {
                     Task { await self.syncCardExpenseToRemote(pendingCard) }
                 }
@@ -577,7 +582,6 @@ final class FinanzasViewModel: ObservableObject {
             return
         }
 
-        // 2. Parsear el HTML en vivo de pagos.xo.je/mis_finanzas.php
         if let parsed = LiveHTMLFinanzasParser.parse(html: text, fallback: finanzas) {
             withAnimation(.spring(response: 0.38, dampingFraction: 0.8)) {
                 self.finanzas = parsed
@@ -773,9 +777,9 @@ final class FinanzasViewModel: ObservableObject {
             let comercio = (payload["comercio"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Compra con Tarjeta"
             let monto = (payload["monto"] as? Double) ?? 0
             guard monto > 0 else { break }
-            let tarjeta = (payload["tarjeta"] as? String) ?? "Débito"
+            let tarjeta = (payload["tarjeta"] as? String) ?? "Débito Nu"
             let metodo = (payload["metodo"] as? String) ?? "Apple Pay"
-            let esCredito = (payload["es_credito"] as? Bool) ?? tarjeta.localizedCaseInsensitiveContains("crédito") || tarjeta.localizedCaseInsensitiveContains("credito") || tarjeta.localizedCaseInsensitiveContains("nu")
+            let esCredito = (payload["es_credito"] as? Bool) ?? (tarjeta.localizedCaseInsensitiveContains("crédito") || tarjeta.localizedCaseInsensitiveContains("credito"))
             let catDetectada = CategoriaTarjeta.detectar(
                 desde: comercio,
                 categoriaExplicita: payload["categoria"] as? String
@@ -793,7 +797,6 @@ final class FinanzasViewModel: ObservableObject {
             )
             finanzas.gastosTarjeta.insert(nuevoItem, at: 0)
 
-            // También lo anotamos en el Historial General de Movimientos
             finanzas.historial.insert(
                 HistorialItem(
                     fecha: fechaActual,
@@ -806,7 +809,6 @@ final class FinanzasViewModel: ObservableObject {
                 at: 0
             )
 
-            // Si el usuario eligió vincular la compra con tarjeta de crédito a una deuda o gasto quincenal
             if let gastoQuincena = payload["sumar_a_gasto_quincena"] as? String,
                !gastoQuincena.isEmpty,
                let idxG = finanzas.gastosLista.firstIndex(where: { $0.nombre.caseInsensitiveCompare(gastoQuincena) == .orderedSame }) {
@@ -834,11 +836,47 @@ final class FinanzasViewModel: ObservableObject {
         }
     }
 
-    // MARK: - Automatización Apple Pay / Apple Watch (Estilo Lukas via Atajos URL Scheme)
-    // Ejemplo de URL que dispara el iPhone o Apple Watch al pagar en datáfono:
-    // misfinanzas://pay?monto=38500&comercio=McDonalds&tarjeta=Debito&metodo=Apple%20Watch
+    // MARK: - Procesar Múltiples Pagos Detectados (Desde URL de Atajo, Portapapeles o Captura OCR)
+    @discardableResult
+    func registrarPagosDetectadosEnLote(_ detectados: [RegistroPagosWalletEngine.PagoDetectado], origenMetodo: String? = nil) async -> Int {
+        guard !detectados.isEmpty else { return 0 }
+        isUnlocked = true
+        navigateToTab = 2
+
+        var nuevosGuardados: [String] = []
+        for det in detectados {
+            let cat = CategoriaTarjeta.detectar(desde: det.comercio)
+            await sendAction([
+                "accion": "registrar_gasto_tarjeta",
+                "comercio": det.comercio,
+                "monto": det.monto,
+                "categoria": cat.rawValue,
+                "tarjeta": det.tarjeta,
+                "metodo": origenMetodo ?? det.metodo,
+                "es_credito": det.tarjeta.localizedCaseInsensitiveContains("crédito") || det.tarjeta.localizedCaseInsensitiveContains("credito")
+            ])
+            nuevosGuardados.append("\(det.comercio) (\(det.monto.copFormatted) → \(cat.rawValue))")
+        }
+
+        if !nuevosGuardados.isEmpty {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.78)) {
+                if nuevosGuardados.count == 1 {
+                    lastApplePayToast = "✅ Guardado: \(nuevosGuardados[0])"
+                } else {
+                    lastApplePayToast = "✅ \(nuevosGuardados.count) pagos guardados: \(nuevosGuardados.joined(separator: " • "))"
+                }
+            }
+        }
+        return nuevosGuardados.count
+    }
+
+    // MARK: - Automatización Apple Pay / Apple Watch / Captura OCR (misfinanzas://pay?texto=...)
     func handleIncomingURL(_ url: URL) {
         guard url.scheme?.lowercased() == "misfinanzas" else { return }
+
+        // Siempre desbloquear e ir a la pestaña Tarjetas cuando viene desde el Atajo
+        isUnlocked = true
+        navigateToTab = 2
 
         let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
         let queryItems = components?.queryItems ?? []
@@ -847,69 +885,114 @@ final class FinanzasViewModel: ObservableObject {
             for n in names {
                 if let val = queryItems.first(where: { $0.name.caseInsensitiveCompare(n) == .orderedSame })?.value,
                    !val.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    return val.removingPercentEncoding ?? val
+                    let plusDecoded = val.replacingOccurrences(of: "+", with: " ")
+                    return plusDecoded.removingPercentEncoding ?? plusDecoded
+                }
+            }
+            // Fallback directo sobre absoluteString por si Atajos insertó saltos de línea que rompen URLComponents
+            let absStr = url.absoluteString
+            for n in names {
+                if let range = absStr.range(of: "\(n)=", options: .caseInsensitive) {
+                    var tail = String(absStr[range.upperBound...])
+                    if let ampRange = tail.range(of: "&monto=", options: .caseInsensitive) ?? tail.range(of: "&comercio=", options: .caseInsensitive) {
+                        tail = String(tail[..<ampRange.lowerBound])
+                    }
+                    let plusDecoded = tail.replacingOccurrences(of: "+", with: " ")
+                    let decoded = plusDecoded.removingPercentEncoding ?? plusDecoded
+                    if !decoded.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        return decoded
+                    }
                 }
             }
             return nil
         }
 
-        // Si el Atajo envía un SMS o notificación completa (ej: misfinanzas://pay?texto=Bancolombia%20compraste%20$25.000%20en%20D1)
-        if let rawTexto = param(["texto", "sms", "mensaje", "notificacion"]),
-           let extraido = RegistroPagosWalletEngine.extraerDatosDeTextoBancario(rawTexto) {
-            isUnlocked = true
-            navigateToTab = 2
-            let cat = CategoriaTarjeta.detectar(desde: extraido.comercio)
+        // 1. Si el Atajo envía texto (captura OCR de notificaciones de Wallet/Nu, SMS o transacción)
+        if let rawTexto = param(["texto", "sms", "mensaje", "notificacion"]) {
+            let detectados = RegistroPagosWalletEngine.extraerTodosLosPagosDeTexto(rawTexto)
+            if !detectados.isEmpty {
+                Task {
+                    await registrarPagosDetectadosEnLote(detectados)
+                }
+                return
+            }
+        }
+
+        // 2. Si el Atajo envía parámetros separados (monto=...&comercio=...)
+        let rawMonto = param(["monto", "amount", "valor"]) ?? "0"
+        let monto = RegistroPagosWalletEngine.limpiarNumeroCOP(rawMonto)
+        if monto > 0 {
+            let comercio = param(["comercio", "merchant", "nombre", "lugar", "texto"]) ?? "Compra Apple Pay"
+            let tarjeta = param(["tarjeta", "card", "medio", "pase"]) ?? "Débito Nu"
+            let metodo = param(["metodo", "dispositivo", "origen"]) ?? "Apple Watch / Pay"
+            let categoriaParam = param(["categoria", "category"])
+            let cat = CategoriaTarjeta.detectar(desde: comercio, categoriaExplicita: categoriaParam)
+            let esCredito = tarjeta.localizedCaseInsensitiveContains("crédito") || tarjeta.localizedCaseInsensitiveContains("credito")
+
             Task {
                 await sendAction([
                     "accion": "registrar_gasto_tarjeta",
-                    "comercio": extraido.comercio,
-                    "monto": extraido.monto,
+                    "comercio": comercio,
+                    "monto": monto,
                     "categoria": cat.rawValue,
-                    "tarjeta": extraido.tarjeta,
-                    "metodo": "SMS / Notificación Bancaria",
-                    "es_credito": extraido.tarjeta.localizedCaseInsensitiveContains("crédito") || extraido.tarjeta.localizedCaseInsensitiveContains("credito")
+                    "tarjeta": tarjeta,
+                    "metodo": metodo,
+                    "es_credito": esCredito
                 ])
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.78)) {
-                    lastApplePayToast = "✅ \(extraido.comercio) (\(extraido.monto.copFormatted)) → \(cat.rawValue) [\(extraido.tarjeta)]"
+                    lastApplePayToast = "✅ \(comercio) (\(monto.copFormatted)) → \(cat.rawValue)"
                 }
             }
             return
         }
 
-        let rawMonto = param(["monto", "amount", "valor"]) ?? "0"
-        let monto = RegistroPagosWalletEngine.limpiarNumeroCOP(rawMonto)
-        guard monto > 0 else { return }
-
-        let comercio = param(["comercio", "merchant", "nombre", "lugar"]) ?? "Compra Apple Pay"
-        let tarjeta = param(["tarjeta", "card", "medio", "pase"]) ?? "Tarjeta Wallet"
-        let metodo = param(["metodo", "dispositivo", "origen"]) ?? "Apple Watch / Pay"
-        let categoriaParam = param(["categoria", "category"])
-
-        let cat = CategoriaTarjeta.detectar(desde: comercio, categoriaExplicita: categoriaParam)
-        let esCredito = tarjeta.localizedCaseInsensitiveContains("crédito") ||
-                        tarjeta.localizedCaseInsensitiveContains("credito") ||
-                        tarjeta.localizedCaseInsensitiveContains("nu")
-
-        isUnlocked = true
-        navigateToTab = 2 // Abrir pestaña Tarjetas / Movimientos automáticamente
-
-        Task {
-            await sendAction([
-                "accion": "registrar_gasto_tarjeta",
-                "comercio": comercio,
-                "monto": monto,
-                "categoria": cat.rawValue,
-                "tarjeta": tarjeta,
-                "metodo": metodo,
-                "es_credito": esCredito
-            ])
-
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.78)) {
-                lastApplePayToast = "Apple Pay: \(comercio) (\(monto.copFormatted)) en \(cat.rawValue)"
+        // 3. Fallback Inteligente: Si el Atajo abrió misfinanzas://pay sin texto o con texto vacío,
+        // revisar si el Atajo copió texto o una captura de pantalla al portapapeles
+        if let clipText = UIPasteboard.general.string, !clipText.isEmpty {
+            let detectadosClip = RegistroPagosWalletEngine.extraerTodosLosPagosDeTexto(clipText)
+            if !detectadosClip.isEmpty {
+                Task {
+                    await registrarPagosDetectadosEnLote(detectadosClip)
+                }
+                return
             }
-            try? await Task.sleep(nanoseconds: 4_000_000_000)
-            withAnimation {
-                lastApplePayToast = nil
+        }
+
+        if let clipImage = UIPasteboard.general.image {
+            Task {
+                let textoOCR = await Self.extraerTextoOCR(de: clipImage)
+                let detectadosImg = RegistroPagosWalletEngine.extraerTodosLosPagosDeTexto(textoOCR)
+                if !detectadosImg.isEmpty {
+                    await registrarPagosDetectadosEnLote(detectadosImg)
+                } else {
+                    shouldOpenQuickScannerSheet = true
+                }
+            }
+            return
+        }
+
+        // 4. Si no vino monto ni en URL ni en portapapeles, abrir directamente el lector de capturas / pago rápido
+        shouldOpenQuickScannerSheet = true
+    }
+
+    // MARK: - OCR Nativo con Apple Vision para leer Capturas de Pantalla de Notificaciones (Wallet / Nu / Bancolombia / QR)
+    static func extraerTextoOCR(de image: UIImage) async -> String {
+        guard let cgImage = image.cgImage else { return "" }
+        return await withCheckedContinuation { continuation in
+            let request = VNRecognizeTextRequest { req, _ in
+                let observations = (req.results as? [VNRecognizedTextObservation]) ?? []
+                let lines = observations.compactMap { $0.topCandidates(1).first?.string }
+                continuation.resume(returning: lines.joined(separator: "\n"))
+            }
+            request.recognitionLevel = .accurate
+            request.usesLanguageCorrection = true
+            request.recognitionLanguages = ["es-CO", "es-ES", "en-US"]
+
+            let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+            do {
+                try handler.perform([request])
+            } catch {
+                continuation.resume(returning: "")
             }
         }
     }

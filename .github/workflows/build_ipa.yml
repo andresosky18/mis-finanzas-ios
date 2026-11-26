@@ -23,8 +23,8 @@ jobs:
           SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
           echo "Usando iOS SDK: $SDK_PATH"
 
-          rm -rf Payload MisFinanzas.ipa
-          mkdir -p Payload/MisFinanzas.app
+          rm -rf Payload MisFinanzas.ipa build_consts
+          mkdir -p Payload/MisFinanzas.app build_consts
 
           if ! xcrun --sdk iphoneos swiftc \
             -target arm64-apple-ios16.0 \
@@ -48,6 +48,36 @@ jobs:
               echo "::error::$ERR_MSG"
               exit 1
           fi
+
+          # Generar metadatos de AppIntents para que las acciones en segundo plano (con iPhone bloqueado) aparezcan en Atajos iOS 27
+          (
+            xcrun --sdk iphoneos swiftc \
+              -target arm64-apple-ios16.0 \
+              -sdk "$SDK_PATH" \
+              -typecheck \
+              -parse-as-library \
+              -primary-file Sources/Services/ApplePayShortcutsIntent.swift \
+              Sources/MisFinanzasApp.swift \
+              Sources/Models/FinanzasModels.swift \
+              Sources/Services/FinanzasViewModel.swift \
+              Sources/Views/LiquidGlassTheme.swift \
+              Sources/Views/MainTabView.swift \
+              Sources/Views/ResumenView.swift \
+              Sources/Views/QuincenaView.swift \
+              Sources/Views/TarjetasView.swift \
+              Sources/Views/DeudasView.swift \
+              Sources/Views/MetasView.swift \
+              -Xfrontend -emit-const-values-path -Xfrontend build_consts/ApplePayShortcutsIntent.swiftconstvalues && \
+            xcrun appintentsmetadataprocessor \
+              --output Payload/MisFinanzas.app \
+              --compile-time-extraction \
+              --bundle-identifier MisFinanzas \
+              --target-triple arm64-apple-ios16.0 \
+              --sdk-root "$SDK_PATH" \
+              --binary-file Payload/MisFinanzas.app/MisFinanzas \
+              --source-files Sources/Services/ApplePayShortcutsIntent.swift \
+              --swift-const-vals build_consts/ApplePayShortcutsIntent.swiftconstvalues
+          ) || echo "Aviso: appintentsmetadataprocessor omitido, continuando empaquetado"
 
           # Estampar LC_BUILD_VERSION SDK 26.0 en el binario Mach-O para activar
           # el motor nativo real de Liquid Glass de iOS 26/27 en UIKit y SwiftUI
